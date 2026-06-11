@@ -43,7 +43,14 @@ Convenience wrappers live in [`scripts/`](./scripts) (all idempotent):
 | `./scripts/reset.sh` | Tear down + rebuild + start with **fresh seed data** (run before a demo) |
 | `./scripts/status.sh` | Show container status + probe each endpoint |
 | `./scripts/logs.sh [service]` | Tail logs for the stack or one service (`api`, `storefront`, `postgres`) |
-| `./scripts/smoke-test.sh` | Run a 16-check end-to-end test of the API contract + proxy |
+| `./scripts/smoke-test.sh` | Run an end-to-end test of the API contract + proxy |
+
+### Local development (live UI edits)
+
+The storefront's static UI (`services/storefront/public/`) is **bind-mounted** into
+the container (see `docker-compose.yml`), so edits to HTML/CSS/JS show up on a browser
+refresh — **no rebuild needed**. Server-side changes (the `api` service, or the
+storefront's `src/`) still require `docker compose up -d --build <service>`.
 
 ### Presentation materials
 
@@ -60,9 +67,10 @@ Convenience wrappers live in [`scripts/`](./scripts) (all idempotent):
 │   (Express + static)  │                                       │   (Express)            │
 │                       │  ◄── 202 eventId / JSON inventory ──  │                        │
 │  • catalog + cart     │                                       │  • 25 req/s rate limit │
-│  • async checkout     │                                       │  • async sale worker   │
-│  • restock (admin)    │                                       │  • Swagger UI /docs    │
-│  • ops dashboard      │                                       │  • analytics endpoint  │
+│  • editable cart qty  │                                       │  • async sale worker   │
+│  • async checkout     │                                       │  • Swagger UI /docs    │
+│  • restock (admin)    │                                       │  • analytics endpoint  │
+│  • ops dashboard      │                                       │  • per-item analytics  │
 │  • load simulator     │                                       └───────────┬───────────┘
 └──────────────────────┘                                                   │ SQL
                                                                 ┌──────────▼───────────┐
@@ -95,7 +103,7 @@ Three containers, one `docker compose up`:
 | **Rate-limit strategy (25 req/s)** | Client-side token-bucket **queue** in the storefront; API still enforces 429. The Ops dashboard has a load simulator to demonstrate it live |
 | **Idempotency** | `Idempotency-Key` header dedupes retried sales so a timeout-retry never double-counts |
 | **Inventory freshness / lag** | UI re-fetches org inventory after checkout and polls `GET /events/:id` to show eventual consistency |
-| **Track inventory over the working day** | Append-only `inventory_ledger` + `GET /analytics/.../timeseries` powering a stock-vs-sold chart |
+| **Track inventory over the working day** | Append-only `inventory_ledger` + `GET /analytics/.../timeseries` powering a stock-vs-sold chart with 12-hour time axis and a hover tooltip showing the per-item (`soldByItem`) breakdown for each interval |
 | **Error handling (409)** | `POST /admin` returns 409 on negative stock; UI surfaces it inline |
 | **Extensibility to AWS** | See mapping below — every local component has a 1:1 managed-service target |
 
@@ -131,7 +139,7 @@ Base URL: **`http://localhost:3001`**
 | POST | `/admin/{itemId}` | sync | Increment/decrement stock (409 on negative) |
 | POST | `/item/{itemId}` | **async** | Register a sale → 202 `{eventId}` |
 | GET | `/events/{eventId}` | sync | Poll async sale status |
-| GET | `/analytics/organization/{id}/timeseries` | sync | Inventory over the working day |
+| GET | `/analytics/organization/{id}/timeseries` | sync | Inventory over the working day (each point includes a `soldByItem` per-item breakdown) |
 | GET | `/health` | sync | DB-backed health probe |
 
 ### Live endpoint URLs (click to try the GETs)

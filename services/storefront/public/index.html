@@ -81,7 +81,12 @@
     .cart-item { background:#fff;border:1px solid var(--border);border-radius:12px;padding:.85rem 1rem;display:flex;align-items:center;gap:.75rem; }
     .ci-emoji { font-size:1.5rem; } .ci-info { flex:1; }
     .ci-name { font-size:.85rem;font-weight:500;margin-bottom:.15rem; } .ci-price { font-size:.8rem;color:var(--muted); }
-    .ci-remove { background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:.2rem;transition:color .15s; }
+    .ci-qty { display:flex;align-items:center;gap:.5rem;margin-top:.4rem; }
+    .ci-qty button { width:24px;height:24px;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;font-size:1rem;line-height:1;color:var(--green);display:flex;align-items:center;justify-content:center;transition:all .15s; }
+    .ci-qty button:hover { background:var(--green);color:#fff;border-color:var(--green); }
+    .ci-qty .qval { width:3rem;text-align:center;font-size:.85rem;font-weight:600;border:1px solid var(--border);border-radius:6px;height:24px;padding:0 .2rem;font-family:inherit;color:var(--text);background:#fff; }
+    .ci-qty .qval:focus { outline:none;border-color:var(--green); }
+    .ci-remove { background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:.2rem;transition:color .15s;align-self:flex-start; }
     .ci-remove:hover { color:var(--red); }
     .cart-footer { padding:1.25rem 1.5rem;border-top:1px solid var(--border);background:#fff; }
     .cart-total { display:flex;justify-content:space-between;font-weight:700;font-size:1.05rem;margin-bottom:1rem; }
@@ -124,6 +129,12 @@
     .panel h3 { font-family:'Playfair Display',serif;color:var(--green);margin-bottom:1rem;font-size:1.2rem; }
     .panel p.sub { color:var(--muted);font-size:.85rem;margin-bottom:1rem;line-height:1.5; }
     canvas { width:100%; max-width:100%; }
+    canvas#chart { cursor:crosshair; }
+    #chart-tip { position:fixed;z-index:500;display:none;background:#1c1c1c;color:#fff;font-size:.75rem;line-height:1.55;padding:.55rem .75rem;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;max-width:240px; }
+    #chart-tip strong { color:var(--gold); }
+    #chart-tip .tip-row { display:flex;justify-content:space-between;gap:1rem; }
+    #chart-tip hr { border:none;border-top:1px solid #444;margin:.4rem 0; }
+    #chart-tip .tip-none { color:#aaa;font-style:italic; }
     .loadtest-controls { display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem; }
     .loadtest-controls .field { margin-bottom:0;min-width:140px; }
     .run-btn { background:var(--blue);color:#fff;border:none;border-radius:10px;padding:.7rem 1.4rem;font-family:'DM Sans';font-weight:600;cursor:pointer;font-size:.9rem; }
@@ -231,6 +242,7 @@
 <div class="modal-overlay" id="checkout-modal"><div class="modal" id="modal-body"></div></div>
 <div class="modal-overlay" id="restock-modal"><div class="modal" id="restock-body"></div></div>
 <div id="toast"></div>
+<div id="chart-tip"></div>
 
 <button class="monitor-toggle" onclick="toggleMonitor()" title="API Monitor">⚡</button>
 <div class="api-monitor" id="api-monitor">
@@ -320,6 +332,20 @@
     updateCartUI(); toast(`Added ${name} ✓`);
   }
   function removeFromCart(id){ cart=cart.filter(c=>c.id!==id); updateCartUI(); }
+  function changeQty(id,delta){
+    const it=cart.find(c=>c.id===id); if(!it) return;
+    it.qty+=delta;
+    if(it.qty<1){ removeFromCart(id); return; }
+    updateCartUI();
+  }
+  function setQty(id,value){
+    const it=cart.find(c=>c.id===id); if(!it) return;
+    const n=parseInt(value,10);
+    if(isNaN(n)){ updateCartUI(); return; }      // revert invalid input
+    if(n<1){ removeFromCart(id); return; }        // typing 0 removes the line
+    it.qty=n;
+    updateCartUI();
+  }
   function updateCartUI(){
     const total=cart.reduce((s,c)=>s+c.price*c.qty,0); const count=cart.reduce((s,c)=>s+c.qty,0);
     document.getElementById('cart-count').textContent=count;
@@ -328,8 +354,9 @@
     const el=document.getElementById('cart-items');
     if(!cart.length){ el.innerHTML='<div class="cart-empty">Your cart is empty.</div>'; return; }
     el.innerHTML=cart.map(c=>`<div class="cart-item"><span class="ci-emoji">${c.emoji}</span>
-      <div class="ci-info"><div class="ci-name">${c.name} × ${c.qty}</div><div class="ci-price">$${(c.price*c.qty).toFixed(2)}</div></div>
-      <button class="ci-remove" onclick="removeFromCart('${c.id}')">✕</button></div>`).join('');
+      <div class="ci-info"><div class="ci-name">${c.name}</div><div class="ci-price">$${c.price.toFixed(2)} each · $${(c.price*c.qty).toFixed(2)}</div>
+        <div class="ci-qty"><button onclick="changeQty('${c.id}',-1)" title="Decrease">−</button><input class="qval" type="number" min="1" step="1" value="${c.qty}" onchange="setQty('${c.id}',this.value)" onfocus="this.select()" title="Quantity"><button onclick="changeQty('${c.id}',1)" title="Increase">+</button></div></div>
+      <button class="ci-remove" onclick="removeFromCart('${c.id}')" title="Remove">✕</button></div>`).join('');
   }
   function openCart(){ document.getElementById('cart-drawer').classList.add('open'); document.getElementById('overlay').classList.add('open'); }
   function closeCart(){ document.getElementById('cart-drawer').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
@@ -436,12 +463,39 @@
     drawChart(ts.points||[]);
   }
 
+  function fmtClock(t){ return new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); }
+  let chartData=null;
+  function bindChartHover(c){
+    if(c.__tipBound) return; c.__tipBound=true;
+    const tip=document.getElementById('chart-tip');
+    c.addEventListener('mousemove',e=>{
+      if(!chartData||!chartData.bars.length){ tip.style.display='none'; return; }
+      const rect=c.getBoundingClientRect(); const mx=e.clientX-rect.left;
+      let best=null,bestD=1e9;
+      for(const b of chartData.bars){ const d=Math.abs(mx-b.x); if(d<bestD){bestD=d;best=b;} }
+      const slot=chartData.bars.length>1?chartData.W/chartData.bars.length:chartData.W;
+      if(!best||bestD>Math.max(slot/2,16)){ tip.style.display='none'; return; }
+      const p=best.p; const items=p.soldByItem||[];
+      const rows=items.length
+        ? items.map(it=>`<div class="tip-row"><span>${it.name}</span><span>× ${it.units}</span></div>`).join('')
+        : '<div class="tip-none">No sales in this interval</div>';
+      tip.innerHTML=`<strong>${fmtClock(p.t)}</strong>${rows}<hr><div class="tip-row"><span>Total sold</span><span>${p.unitsSold}</span></div><div class="tip-row"><span>Stock</span><span>${p.totalStock}</span></div>`;
+      tip.style.display='block';
+      const tw=tip.offsetWidth, th=tip.offsetHeight;
+      let lx=e.clientX+14, ly=e.clientY+14;
+      if(lx+tw>window.innerWidth-8) lx=e.clientX-tw-14;
+      if(ly+th>window.innerHeight-8) ly=e.clientY-th-14;
+      tip.style.left=lx+'px'; tip.style.top=ly+'px';
+    });
+    c.addEventListener('mouseleave',()=>{ tip.style.display='none'; });
+  }
+
   function drawChart(points){
     const c=document.getElementById('chart'); const dpr=window.devicePixelRatio||1;
     const W=c.clientWidth, H=260; c.width=W*dpr; c.height=H*dpr; const ctx=c.getContext('2d'); ctx.scale(dpr,dpr);
     ctx.clearRect(0,0,W,H);
-    const pad={l:50,r:20,t:20,b:30};
-    if(!points.length){ ctx.fillStyle='#7a7265'; ctx.font='14px DM Sans'; ctx.fillText('No movement recorded yet — make a sale or restock.',pad.l,H/2); return; }
+    const pad={l:50,r:20,t:20,b:46};
+    if(!points.length){ chartData=null; ctx.fillStyle='#7a7265'; ctx.font='14px DM Sans'; ctx.fillText('No movement recorded yet — make a sale or restock.',pad.l,H/2); return; }
     const xs=points.map((_,i)=>i);
     const maxStock=Math.max(...points.map(p=>p.totalStock),1);
     const maxSold=Math.max(...points.map(p=>p.unitsSold),1);
@@ -459,9 +513,20 @@
     ctx.strokeStyle='#1a5c2e'; ctx.lineWidth=2.5; ctx.beginPath();
     points.forEach((p,i)=>{ const x=px(i),y=pyStock(p.totalStock); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
     ctx.fillStyle='#1a5c2e'; points.forEach((p,i)=>{ ctx.beginPath(); ctx.arc(px(i),pyStock(p.totalStock),3,0,7); ctx.fill(); });
+    // x-axis time labels (thinned so they don't overlap) + caption
+    ctx.fillStyle='#999'; ctx.font='10px DM Sans'; ctx.textAlign='center';
+    const maxLabels=Math.max(2,Math.floor((W-pad.l-pad.r)/68));
+    const step=Math.max(1,Math.ceil(points.length/maxLabels));
+    points.forEach((p,i)=>{ if(i%step===0 || i===points.length-1){ ctx.fillText(fmtClock(p.t),px(i),H-pad.b+15); } });
+    ctx.fillStyle='#7a7265'; ctx.fillText('Time of day',pad.l+(W-pad.l-pad.r)/2,H-3);
+    ctx.textAlign='left';
     // legend
     ctx.font='11px DM Sans'; ctx.fillStyle='#1a5c2e'; ctx.fillText('● total stock',pad.l,12);
     ctx.fillStyle='#9a7d24'; ctx.fillText('▮ units sold',pad.l+90,12);
+    ctx.fillStyle='#7a7265'; ctx.font='10px DM Sans'; ctx.fillText('hover a bar for item detail',W-pad.r-130,12);
+    // store geometry for hover tooltip
+    chartData={ bars: points.map((p,i)=>({ x:px(i), p })), W };
+    bindChartHover(c);
   }
 
   // ── Load / rate-limit simulation ──

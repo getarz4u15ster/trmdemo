@@ -138,6 +138,10 @@ paths:
         Returns a time-bucketed view of total inventory and units sold for an
         organization — the "track total inventory levels over the course of the
         working day" requirement.
+
+
+        Each point also includes a `soldByItem` breakdown listing which items
+        sold (and how many) within that interval, ordered by units descending.
       parameters:
         - $ref: "#/components/parameters/OrganizationId"
         - name: bucketMinutes
@@ -282,3 +286,11 @@ components:
               t: { type: string, format: date-time }
               totalStock: { type: integer }
               unitsSold: { type: integer }
+              soldByItem:
+                type: array
+                description: Per-item sales within this interval, ordered by units descending.
+                items:
+                  type: object
+                  properties:
+                    name: { type: string, example: "Sparkling Water (12-pack)" }
+                    units: { type: integer, example: 8 }

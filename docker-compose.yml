@@ -56,6 +56,10 @@ services:
       CLIENT_RATE: "20"
     ports:
       - "3000:3000"
+    volumes:
+      # Live-mount the static UI so HTML/CSS/JS edits show on browser refresh
+      # without rebuilding the image.
+      - ./services/storefront/public:/app/public:ro
     depends_on:
       - api
     restart: unless-stopped

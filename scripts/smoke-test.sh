@@ -47,6 +47,7 @@ check "retry returns same eventId" "$E1" "$E2"
 
 echo "• Analytics"
 check "GET timeseries 200"        200 "$(code "$API/analytics/organization/351/timeseries")"
+check "timeseries has soldByItem" "yes" "$(curl -s "$API/analytics/organization/351/timeseries" | grep -q soldByItem && echo yes || echo no)"
 
 echo "• Storefront proxy"
 check "GET / 200"                 200 "$(code "$STORE/")"

@@ -237,6 +237,24 @@ app.get("/analytics/organization/:organizationId/timeseries", async (req, res) =
     [organizationId, bucketMinutes]
   );
 
+  // Per-item sales per bucket, so the UI can show *which* items sold in each interval.
+  const breakdown = await query(
+    `SELECT to_timestamp(floor(extract(epoch FROM l.created_at) / ($2 * 60)) * ($2 * 60)) AS bucket,
+            i.name AS item_name,
+            COUNT(*)::int AS units
+       FROM inventory_ledger l
+       JOIN items i ON i.id = l.item_id
+      WHERE l.organization_id = $1 AND l.reason = 'SALE'
+      GROUP BY bucket, i.name
+      ORDER BY bucket, units DESC`,
+    [organizationId, bucketMinutes]
+  );
+  const soldByBucket = {};
+  for (const r of breakdown.rows) {
+    const key = new Date(r.bucket).toISOString();
+    (soldByBucket[key] = soldByBucket[key] || []).push({ name: r.item_name, units: Number(r.units) });
+  }
+
   res.json({
     organizationId,
     organizationName: org.rows[0].name,
@@ -245,6 +263,7 @@ app.get("/analytics/organization/:organizationId/timeseries", async (req, res) =
       t: r.bucket,
       totalStock: Number(r.total_stock),
       unitsSold: Number(r.units_sold),
+      soldByItem: soldByBucket[new Date(r.bucket).toISOString()] || [],
     })),
   });
 });
