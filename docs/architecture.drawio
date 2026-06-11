@@ -91,8 +91,8 @@
         <mxCell id="rds" parent="1" style="shape=cylinder3;boundedLbl=1;backgroundOutline=1;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;verticalAlign=middle;align=center;fontSize=14;fontColor=#000000;" value="&lt;b&gt;RDS (PostgreSQL)&lt;/b&gt;&lt;br&gt;items · inventory&lt;br&gt;sale_events · inventory_ledger&lt;br&gt;Multi-AZ" vertex="1">
           <mxGeometry height="124" width="190" x="490" y="400" as="geometry" />
         </mxCell>
-        <mxCell id="s3" parent="1" style="shape=mxgraph.aws4.bucket;html=1;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;verticalAlign=middle;align=center;fontSize=14;fontColor=#000000;" value="&lt;b&gt;S3&lt;/b&gt;&lt;br&gt;product images&lt;br&gt;day-end archive / Glacier" vertex="1">
-          <mxGeometry height="94" width="170" x="980" y="110" as="geometry" />
+        <mxCell id="s3" parent="1" style="shape=mxgraph.aws4.bucket;html=1;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;verticalAlign=middle;align=center;fontSize=14;fontColor=#000000;" value="&lt;font style=&quot;background-color: rgb(213, 232, 212); color: rgb(11, 11, 11);&quot;&gt;&lt;b style=&quot;&quot;&gt;S3&lt;/b&gt;&lt;br&gt;product images&lt;br&gt;day-end archive / Glacier&lt;/font&gt;" vertex="1">
+          <mxGeometry height="94" width="170" x="980" y="105" as="geometry" />
         </mxCell>
         <mxCell id="secrets" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontColor=#000000;" value="&lt;b&gt;Secrets Manager / SSM&lt;/b&gt;&lt;br&gt;DB credentials, config" vertex="1">
           <mxGeometry height="74" width="170" x="980" y="240" as="geometry" />
