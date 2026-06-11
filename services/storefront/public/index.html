@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABC Supermarkets — powered by InventorySoft</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green:#1a5c2e; --green2:#2d8048; --cream:#faf7f2; --warm:#f5efe6;
+      --red:#c0392b; --gold:#c8a84b; --text:#1c1c1c; --muted:#7a7265;
+      --card-bg:#fff; --border:#e4ddd3; --blue:#2b6cb0;
+    }
+    body { font-family:'DM Sans',sans-serif; background:var(--cream); color:var(--text); min-height:100vh; }
+
+    header {
+      background:var(--green); padding:0 2rem; display:flex; align-items:center;
+      justify-content:space-between; position:sticky; top:0; z-index:100;
+      box-shadow:0 2px 16px rgba(0,0,0,0.25);
+    }
+    .logo { display:flex; align-items:center; gap:.75rem; padding:1rem 0; }
+    .logo-badge { width:44px;height:44px;background:var(--gold);border-radius:50%;
+      display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;
+      font-weight:900;font-size:1.1rem;color:var(--green); }
+    .logo-text { font-family:'Playfair Display',serif;color:#fff;font-size:1.3rem;font-weight:700;line-height:1.1; }
+    .logo-text span { display:block;font-size:.7rem;font-weight:400;letter-spacing:.12em;color:rgba(255,255,255,.65);text-transform:uppercase; }
+    .header-right { display:flex; align-items:center; gap:1rem; }
+    .nav-btn { background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:24px;
+      padding:.5rem 1rem;font-family:'DM Sans';font-size:.85rem;cursor:pointer;transition:all .15s; }
+    .nav-btn:hover { background:rgba(255,255,255,.12); }
+    .nav-btn.active { background:var(--gold); color:var(--green); border-color:var(--gold); font-weight:700; }
+    .cart-btn { background:var(--gold);color:var(--green);border:none;border-radius:28px;padding:.6rem 1.25rem;
+      font-family:'DM Sans';font-weight:500;font-size:.9rem;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:transform .15s,box-shadow .15s; }
+    .cart-btn:hover { transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.2); }
+    .cart-count { background:var(--green);color:#fff;border-radius:50%;width:20px;height:20px;font-size:.7rem;display:flex;align-items:center;justify-content:center;font-weight:700; }
+
+    main { max-width:1200px; margin:0 auto; padding:2rem 1.5rem; }
+    .view { display:none; } .view.active { display:block; }
+
+    .org-tabs { display:flex;gap:.5rem;margin-bottom:2rem;background:var(--warm);padding:.4rem;border-radius:12px;border:1px solid var(--border); }
+    .org-tab { flex:1;padding:.6rem 1rem;border:none;border-radius:8px;background:transparent;cursor:pointer;font-family:'DM Sans';font-size:.88rem;font-weight:500;color:var(--muted);transition:all .2s; }
+    .org-tab.active { background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(26,92,46,.3); }
+
+    .section-heading { font-family:'Playfair Display',serif;font-size:1.6rem;margin-bottom:1.25rem;color:var(--green);display:flex;justify-content:space-between;align-items:center; }
+    .section-heading small { font-family:'DM Sans';font-size:.8rem;color:var(--muted);font-weight:400; }
+
+    .products-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1.25rem;margin-bottom:3rem; }
+    .product-card { background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:transform .2s,box-shadow .2s;animation:fadeUp .35s ease both; }
+    .product-card:hover { transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.09); }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(12px);} to{opacity:1;transform:translateY(0);} }
+    .product-img { width:100%;height:130px;display:flex;align-items:center;justify-content:center;font-size:3.4rem;background:var(--warm); }
+    .product-info { padding:1rem; }
+    .product-name { font-family:'Playfair Display',serif;font-size:.95rem;font-weight:700;margin-bottom:.25rem;line-height:1.3; }
+    .product-id { font-size:.72rem;color:var(--muted);margin-bottom:.5rem;font-family:monospace; }
+    .product-meta { display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem; }
+    .product-price { font-size:1.1rem;font-weight:700;color:var(--green); }
+    .stock-badge { font-size:.72rem;padding:.2rem .5rem;border-radius:20px;font-weight:500; }
+    .stock-ok{background:#d4edda;color:#155724;} .stock-low{background:#fff3cd;color:#856404;} .stock-out{background:#f8d7da;color:#721c24;}
+    .btn-row-card { display:flex; gap:.4rem; }
+    .add-btn { flex:1;padding:.55rem;border:1.5px solid var(--green);background:transparent;color:var(--green);border-radius:8px;font-family:'DM Sans';font-weight:500;font-size:.85rem;cursor:pointer;transition:all .15s; }
+    .add-btn:hover { background:var(--green);color:#fff; }
+    .add-btn:disabled { border-color:var(--border);color:var(--muted);cursor:not-allowed; }
+    .restock-btn { padding:.55rem .7rem;border:1.5px solid var(--gold);background:transparent;color:#9a7d24;border-radius:8px;cursor:pointer;font-size:.85rem;transition:all .15s; }
+    .restock-btn:hover { background:var(--gold);color:var(--green); }
+
+    .loading { text-align:center;padding:3rem;color:var(--muted);font-size:.95rem; }
+    .spinner { width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 1rem; }
+    @keyframes spin { to{transform:rotate(360deg);} }
+
+    .drawer-overlay { position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s; }
+    .drawer-overlay.open { opacity:1;pointer-events:auto; }
+    .cart-drawer { position:fixed;top:0;right:0;bottom:0;width:min(420px,95vw);background:var(--cream);z-index:300;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);box-shadow:-8px 0 32px rgba(0,0,0,.15); }
+    .cart-drawer.open { transform:translateX(0); }
+    .drawer-header { background:var(--green);color:#fff;padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between; }
+    .drawer-header h2 { font-family:'Playfair Display',serif;font-size:1.3rem; }
+    .close-btn { background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:.25rem;line-height:1; }
+    .cart-items { flex:1;overflow-y:auto;padding:1.25rem;display:flex;flex-direction:column;gap:.75rem; }
+    .cart-empty { text-align:center;color:var(--muted);padding:2rem;font-size:.9rem; }
+    .cart-item { background:#fff;border:1px solid var(--border);border-radius:12px;padding:.85rem 1rem;display:flex;align-items:center;gap:.75rem; }
+    .ci-emoji { font-size:1.5rem; } .ci-info { flex:1; }
+    .ci-name { font-size:.85rem;font-weight:500;margin-bottom:.15rem; } .ci-price { font-size:.8rem;color:var(--muted); }
+    .ci-remove { background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:.2rem;transition:color .15s; }
+    .ci-remove:hover { color:var(--red); }
+    .cart-footer { padding:1.25rem 1.5rem;border-top:1px solid var(--border);background:#fff; }
+    .cart-total { display:flex;justify-content:space-between;font-weight:700;font-size:1.05rem;margin-bottom:1rem; }
+    .checkout-btn { width:100%;padding:.85rem;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:'DM Sans';font-weight:600;font-size:1rem;cursor:pointer;transition:background .15s,transform .15s; }
+    .checkout-btn:hover { background:var(--green2);transform:translateY(-1px); }
+    .checkout-btn:disabled { background:var(--muted);cursor:not-allowed;transform:none; }
+
+    .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s; }
+    .modal-overlay.open { opacity:1;pointer-events:auto; }
+    .modal { background:var(--cream);border-radius:20px;padding:2rem;width:min(520px,92vw);max-height:90vh;overflow-y:auto;transform:scale(.95);transition:transform .25s; }
+    .modal-overlay.open .modal { transform:scale(1); }
+    .modal h2 { font-family:'Playfair Display',serif;font-size:1.5rem;margin-bottom:1.25rem;color:var(--green); }
+    .modal-section { margin-bottom:1.25rem; }
+    .modal-section h3 { font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.75rem; }
+    .order-line { display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:.4rem; }
+    .order-divider { border:none;border-top:1px solid var(--border);margin:.75rem 0; }
+    .order-total { font-weight:700;font-size:1rem; }
+    .api-log { background:#1c1c1c;color:#a8ff78;border-radius:10px;padding:1rem;font-family:monospace;font-size:.75rem;line-height:1.7;max-height:220px;overflow-y:auto; }
+    .log-pending{color:#ffd57e;} .log-success{color:#a8ff78;} .log-error{color:#ff7e7e;} .log-info{color:#7eb8ff;}
+    .confirm-btn,.cancel-btn { padding:.75rem 1.5rem;border-radius:10px;border:none;font-family:'DM Sans';font-weight:600;font-size:.9rem;cursor:pointer;transition:all .15s; }
+    .confirm-btn { background:var(--green);color:#fff; } .confirm-btn:hover { background:var(--green2); }
+    .cancel-btn { background:var(--border);color:var(--text);margin-right:.75rem; } .cancel-btn:hover { background:#d0c9c0; }
+    .btn-row { display:flex;justify-content:flex-end;margin-top:1.5rem; }
+    .success-banner { text-align:center;padding:1.5rem 0; }
+    .success-banner .check { font-size:3rem;margin-bottom:.5rem; }
+    .success-banner h3 { font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--green); }
+    .success-banner p { color:var(--muted);font-size:.88rem;margin-top:.4rem; }
+    .field { margin-bottom:1rem; } .field label { display:block;font-size:.8rem;color:var(--muted);margin-bottom:.35rem; }
+    .field input,.field select { width:100%;padding:.6rem;border:1px solid var(--border);border-radius:8px;font-family:'DM Sans';font-size:.9rem; }
+
+    #toast { position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#fff;padding:.65rem 1.25rem;border-radius:24px;font-size:.85rem;font-weight:500;z-index:999;transition:transform .3s;white-space:nowrap; }
+    #toast.show { transform:translateX(-50%) translateY(0); }
+
+    /* Operations dashboard */
+    .stat-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:2rem; }
+    .stat-card { background:#fff;border:1px solid var(--border);border-radius:14px;padding:1.25rem; }
+    .stat-card .label { font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem; }
+    .stat-card .value { font-size:1.8rem;font-weight:700;color:var(--green);font-family:'Playfair Display',serif; }
+    .panel { background:#fff;border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin-bottom:1.5rem; }
+    .panel h3 { font-family:'Playfair Display',serif;color:var(--green);margin-bottom:1rem;font-size:1.2rem; }
+    .panel p.sub { color:var(--muted);font-size:.85rem;margin-bottom:1rem;line-height:1.5; }
+    canvas { width:100%; max-width:100%; }
+    .loadtest-controls { display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem; }
+    .loadtest-controls .field { margin-bottom:0;min-width:140px; }
+    .run-btn { background:var(--blue);color:#fff;border:none;border-radius:10px;padding:.7rem 1.4rem;font-family:'DM Sans';font-weight:600;cursor:pointer;font-size:.9rem; }
+    .run-btn:hover { filter:brightness(1.08); } .run-btn:disabled { background:var(--muted);cursor:not-allowed; }
+    .meter { height:14px;background:var(--warm);border-radius:8px;overflow:hidden;border:1px solid var(--border); }
+    .meter > div { height:100%;background:linear-gradient(90deg,var(--green2),var(--gold));transition:width .2s; }
+    .kv { display:flex;justify-content:space-between;font-size:.85rem;padding:.3rem 0;border-bottom:1px dashed var(--border); }
+    .kv:last-child { border-bottom:none; }
+    .docs-link { color:var(--blue);text-decoration:none;font-weight:500; } .docs-link:hover { text-decoration:underline; }
+
+    .monitor-toggle { position:fixed;bottom:1.5rem;right:1.5rem;background:var(--green);color:#fff;border:none;border-radius:50%;width:48px;height:48px;font-size:1.2rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:150;transition:transform .15s; }
+    .monitor-toggle:hover { transform:scale(1.08); }
+    .api-monitor { position:fixed;bottom:5rem;right:1.5rem;width:380px;background:#1c1c1c;border-radius:14px;z-index:150;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden;transform-origin:bottom right;transform:scale(0);opacity:0;transition:transform .25s,opacity .25s; }
+    .api-monitor.open { transform:scale(1);opacity:1; }
+    .monitor-header { background:#111;padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #333; }
+    .monitor-header span { color:#a8ff78;font-family:monospace;font-size:.8rem;font-weight:700; }
+    .monitor-clear { background:none;border:none;color:#666;font-size:.7rem;cursor:pointer;font-family:monospace; } .monitor-clear:hover { color:#aaa; }
+    #monitor-log { color:#ccc;font-family:monospace;font-size:.72rem;line-height:1.8;padding:.75rem 1rem;max-height:300px;overflow-y:auto; }
+    #monitor-log .m-ts{color:#555;} #monitor-log .m-method{color:#ffd57e;font-weight:700;} #monitor-log .m-url{color:#7eb8ff;}
+    #monitor-log .m-status-ok{color:#a8ff78;} #monitor-log .m-status-err{color:#ff7e7e;} #monitor-log .m-async{color:#c8a84b;}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-badge">A</div>
+    <div class="logo-text">ABC Supermarkets<span>Powered by InventorySoft</span></div>
+  </div>
+  <div class="header-right">
+    <button class="nav-btn active" id="nav-shop" onclick="switchView('shop')">Storefront</button>
+    <button class="nav-btn" id="nav-ops" onclick="switchView('ops')">Operations</button>
+    <button class="cart-btn" onclick="openCart()">🛒 Cart <span class="cart-count" id="cart-count">0</span></button>
+  </div>
+</header>
+
+<main>
+  <!-- ── SHOP VIEW ── -->
+  <div class="view active" id="view-shop">
+    <div class="org-tabs" id="org-tabs">
+      <button class="org-tab active" onclick="loadOrg('351', this)">🛒 General Goods</button>
+      <button class="org-tab" onclick="loadOrg('352', this)">🥐 Bakery</button>
+      <button class="org-tab" onclick="loadOrg('353', this)">🥩 Deli</button>
+    </div>
+    <h2 class="section-heading"><span id="section-title">General Goods</span><small id="org-sub"></small></h2>
+    <div id="products" class="products-grid">
+      <div class="loading"><div class="spinner"></div>Loading inventory from InventorySoft…</div>
+    </div>
+  </div>
+
+  <!-- ── OPERATIONS VIEW ── -->
+  <div class="view" id="view-ops">
+    <h2 class="section-heading">Operations Dashboard <small>Org <span id="ops-org-label">351</span> · live from InventorySoft</small></h2>
+    <div class="org-tabs">
+      <button class="org-tab active" onclick="loadOps('351', this)">General Goods</button>
+      <button class="org-tab" onclick="loadOps('352', this)">Bakery</button>
+      <button class="org-tab" onclick="loadOps('353', this)">Deli</button>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">Total Units in Stock</div><div class="value" id="stat-stock">—</div></div>
+      <div class="stat-card"><div class="label">Units Sold Today</div><div class="value" id="stat-sold">—</div></div>
+      <div class="stat-card"><div class="label">Inventory Value</div><div class="value" id="stat-value">—</div></div>
+      <div class="stat-card"><div class="label">SKUs Low/Out</div><div class="value" id="stat-low">—</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Inventory Over the Working Day</h3>
+      <p class="sub">Total stock (line) and units sold per interval (bars), aggregated from the InventorySoft ledger via
+        <code>GET /analytics/organization/{id}/timeseries</code>. This is the "track total inventory over the working day" requirement.</p>
+      <canvas id="chart" height="260"></canvas>
+    </div>
+
+    <div class="panel">
+      <h3>Rate-Limit & Load Simulation</h3>
+      <p class="sub">The InventorySoft API caps at <strong>25 req/s</strong>. The storefront funnels all calls through a
+        token-bucket queue (≈20 req/s) so bursts get smoothed instead of returning 429. Fire a burst of sales below and
+        watch the queue absorb it. <a class="docs-link" href="http://localhost:3001/docs" target="_blank">Open Swagger ↗</a></p>
+      <div class="loadtest-controls">
+        <div class="field"><label>Sale events to fire</label><input id="lt-count" type="number" value="100" min="1" max="1000"></div>
+        <div class="field"><label>Target item</label><select id="lt-item"></select></div>
+        <button class="run-btn" id="lt-run" onclick="runLoadTest()">▶ Fire burst</button>
+      </div>
+      <div class="meter" style="margin-bottom:.75rem"><div id="lt-meter" style="width:0%"></div></div>
+      <div class="kv"><span>Sent</span><span id="lt-sent">0</span></div>
+      <div class="kv"><span>Accepted (202)</span><span id="lt-ok">0</span></div>
+      <div class="kv"><span>Rate limited (429)</span><span id="lt-429">0</span></div>
+      <div class="kv"><span>Current client queue depth</span><span id="lt-queue">0</span></div>
+      <div class="kv"><span>Peak queue depth</span><span id="lt-peak">0</span></div>
+    </div>
+  </div>
+</main>
+
+<!-- Cart drawer -->
+<div class="drawer-overlay" id="overlay" onclick="closeCart()"></div>
+<div class="cart-drawer" id="cart-drawer">
+  <div class="drawer-header"><h2>Your Cart</h2><button class="close-btn" onclick="closeCart()">✕</button></div>
+  <div class="cart-items" id="cart-items"><div class="cart-empty">Your cart is empty.<br>Add some items to get started!</div></div>
+  <div class="cart-footer">
+    <div class="cart-total"><span>Total</span><span id="cart-total">$0.00</span></div>
+    <button class="checkout-btn" onclick="openCheckout()" id="checkout-btn" disabled>Proceed to Checkout</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="checkout-modal"><div class="modal" id="modal-body"></div></div>
+<div class="modal-overlay" id="restock-modal"><div class="modal" id="restock-body"></div></div>
+<div id="toast"></div>
+
+<button class="monitor-toggle" onclick="toggleMonitor()" title="API Monitor">⚡</button>
+<div class="api-monitor" id="api-monitor">
+  <div class="monitor-header"><span>⚡ InventorySoft API Monitor</span><button class="monitor-clear" onclick="clearMonitor()">clear</button></div>
+  <div id="monitor-log"><span style="color:#555">// API calls will appear here...</span></div>
+</div>
+
+<script>
+  let cart = [];
+  let currentOrg = '351';
+  let currentItems = [];
+  let opsOrg = '351';
+  const ORG_NAMES = { '351':'General Goods', '352':'Bakery', '353':'Deli' };
+  const EMOJIS = { '92746661':'🥛','92746662':'🍞','92746663':'🥚','92746664':'🧀','92746665':'🍗','92746666':'🍅','92746667':'🍊','92746668':'🥐','92746669':'🦃','92746670':'💧' };
+
+  // ── API monitor ──
+  let monitorOpen = false;
+  function toggleMonitor(){ monitorOpen=!monitorOpen; document.getElementById('api-monitor').classList.toggle('open',monitorOpen); }
+  function clearMonitor(){ document.getElementById('monitor-log').innerHTML='<span style="color:#555">// cleared</span>'; }
+  function logAPI(method,url,status,note){
+    const ts=new Date().toLocaleTimeString('en-US',{hour12:false});
+    const cls=(!status||status>=400)?'m-status-err':'m-status-ok';
+    const statusStr=status?`<span class="${cls}">${status}</span>`:'<span class="m-async">async→</span>';
+    const el=document.getElementById('monitor-log');
+    const line=document.createElement('div');
+    line.innerHTML=`<span class="m-ts">${ts}</span> <span class="m-method">${method}</span> <span class="m-url">${url}</span> ${statusStr}${note?` <span style="color:#888">${note}</span>`:''}`;
+    if(el.firstChild && el.firstChild.textContent==='// API calls will appear here...') el.innerHTML='';
+    el.appendChild(line); el.scrollTop=el.scrollHeight;
+  }
+
+  async function apiGet(path){ const r=await fetch(`/proxy${path}`); logAPI('GET',path,r.status); return r.json(); }
+  async function apiPost(path,body,headers){
+    const r=await fetch(`/proxy${path}`,{method:'POST',headers:{'Content-Type':'application/json',...(headers||{})},body:JSON.stringify(body)});
+    logAPI('POST',path,r.status); let data={}; try{data=await r.json();}catch{} return {status:r.status,data};
+  }
+
+  // ── View switching ──
+  function switchView(v){
+    document.getElementById('view-shop').classList.toggle('active',v==='shop');
+    document.getElementById('view-ops').classList.toggle('active',v==='ops');
+    document.getElementById('nav-shop').classList.toggle('active',v==='shop');
+    document.getElementById('nav-ops').classList.toggle('active',v==='ops');
+    if(v==='ops') loadOps(opsOrg);
+  }
+
+  // ── Shop ──
+  async function loadOrg(orgId,tabEl){
+    currentOrg=orgId;
+    if(tabEl){ document.querySelectorAll('#org-tabs .org-tab').forEach(t=>t.classList.remove('active')); tabEl.classList.add('active'); }
+    document.getElementById('section-title').textContent=ORG_NAMES[orgId];
+    const grid=document.getElementById('products');
+    grid.innerHTML='<div class="loading"><div class="spinner"></div>Fetching inventory…</div>';
+    try{
+      const data=await apiGet(`/organization/${orgId}`);
+      currentItems=data.items||[];
+      document.getElementById('org-sub').textContent=`${currentItems.length} SKUs · ${data.organizationName}`;
+      renderProducts(currentItems);
+    }catch(e){
+      grid.innerHTML=`<div class="loading" style="color:#c0392b">❌ Could not connect to InventorySoft API.<br><small>Is the stack running? (docker compose up)</small></div>`;
+    }
+  }
+  function renderProducts(items){
+    const grid=document.getElementById('products');
+    if(!items.length){ grid.innerHTML='<div class="loading">No items found.</div>'; return; }
+    grid.innerHTML=items.map((item,i)=>{
+      const emoji=EMOJIS[item.itemId]||'🛒'; const stock=item.stock;
+      const [bc,bt]=stock===0?['stock-out','Out of Stock']:stock<20?['stock-low','Low Stock']:['stock-ok','In Stock'];
+      const oos=stock===0;
+      return `<div class="product-card" style="animation-delay:${i*0.05}s">
+        <div class="product-img">${emoji}</div>
+        <div class="product-info">
+          <div class="product-name">${item.name}</div>
+          <div class="product-id">ID: ${item.itemId}</div>
+          <div class="product-meta"><span class="product-price">$${item.price.toFixed(2)}</span>
+            <span class="stock-badge ${bc}">${stock>0?stock+' left':bt}</span></div>
+          <div class="btn-row-card">
+            <button class="add-btn" ${oos?'disabled':''} onclick="addToCart('${item.itemId}','${item.name.replace(/'/g,"\\'")}',${item.price},'${emoji}')">${oos?'Out of Stock':'Add to Cart'}</button>
+            <button class="restock-btn" title="Restock (admin)" onclick="openRestock('${item.itemId}','${item.name.replace(/'/g,"\\'")}')">📦</button>
+          </div>
+        </div></div>`;
+    }).join('');
+  }
+
+  // ── Cart ──
+  function addToCart(id,name,price,emoji){
+    const ex=cart.find(c=>c.id===id); if(ex)ex.qty++; else cart.push({id,name,price,emoji,qty:1,orgId:currentOrg});
+    updateCartUI(); toast(`Added ${name} ✓`);
+  }
+  function removeFromCart(id){ cart=cart.filter(c=>c.id!==id); updateCartUI(); }
+  function updateCartUI(){
+    const total=cart.reduce((s,c)=>s+c.price*c.qty,0); const count=cart.reduce((s,c)=>s+c.qty,0);
+    document.getElementById('cart-count').textContent=count;
+    document.getElementById('cart-total').textContent=`$${total.toFixed(2)}`;
+    document.getElementById('checkout-btn').disabled=cart.length===0;
+    const el=document.getElementById('cart-items');
+    if(!cart.length){ el.innerHTML='<div class="cart-empty">Your cart is empty.</div>'; return; }
+    el.innerHTML=cart.map(c=>`<div class="cart-item"><span class="ci-emoji">${c.emoji}</span>
+      <div class="ci-info"><div class="ci-name">${c.name} × ${c.qty}</div><div class="ci-price">$${(c.price*c.qty).toFixed(2)}</div></div>
+      <button class="ci-remove" onclick="removeFromCart('${c.id}')">✕</button></div>`).join('');
+  }
+  function openCart(){ document.getElementById('cart-drawer').classList.add('open'); document.getElementById('overlay').classList.add('open'); }
+  function closeCart(){ document.getElementById('cart-drawer').classList.remove('open'); document.getElementById('overlay').classList.remove('open'); }
+
+  // ── Checkout (async sales w/ idempotency keys + polling) ──
+  function openCheckout(){
+    closeCart();
+    const total=cart.reduce((s,c)=>s+c.price*c.qty,0);
+    const lines=cart.map(c=>`<div class="order-line"><span>${c.emoji} ${c.name} × ${c.qty}</span><span>$${(c.price*c.qty).toFixed(2)}</span></div>`).join('');
+    document.getElementById('modal-body').innerHTML=`<h2>🧾 Review & Confirm Order</h2>
+      <div class="modal-section"><h3>Order Summary</h3>${lines}<hr class="order-divider"/>
+        <div class="order-line order-total"><span>Total</span><span>$${total.toFixed(2)}</span></div></div>
+      <div class="modal-section"><h3>What happens on confirm</h3>
+        <p style="font-size:.85rem;color:var(--muted);line-height:1.6">Each unit fires an async <code>POST /item/{id}</code> with a unique
+        <code>Idempotency-Key</code> (safe retries). We then poll <code>GET /events/{eventId}</code> until COMPLETED.</p></div>
+      <div id="checkout-log" style="display:none" class="modal-section"><h3>API Call Log</h3><div class="api-log" id="modal-api-log"></div></div>
+      <div class="btn-row" id="checkout-btns"><button class="cancel-btn" onclick="closeCheckout()">Cancel</button>
+        <button class="confirm-btn" onclick="confirmCheckout()">Confirm Order</button></div>`;
+    document.getElementById('checkout-modal').classList.add('open');
+  }
+  function closeCheckout(){ document.getElementById('checkout-modal').classList.remove('open'); }
+  function uuid(){ return (crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()); }
+
+  async function confirmCheckout(){
+    document.getElementById('checkout-btns').innerHTML='<em style="color:var(--muted);font-size:.85rem">Processing…</em>';
+    document.getElementById('checkout-log').style.display='block';
+    const logEl=document.getElementById('modal-api-log');
+    const append=(m,c)=>{ const l=document.createElement('div'); l.className=c||''; l.textContent=m; logEl.appendChild(l); logEl.scrollTop=logEl.scrollHeight; };
+    append(`[${new Date().toISOString()}] Starting checkout for ${cart.length} line item(s)…`,'log-info');
+    const promises=[];
+    for(const item of cart){
+      for(let q=0;q<item.qty;q++){
+        const key=uuid();
+        append(`→ POST /item/${item.id} (unit ${q+1}/${item.qty})`,'log-pending');
+        promises.push(apiPost(`/item/${item.id}`,{itemId:item.id,organizationId:item.orgId},{'Idempotency-Key':key}).then(({status,data})=>{
+          if(data.eventId){ append(`  ✓ eventId ${data.eventId.slice(0,8)}…`,'log-success'); return pollEvent(data.eventId,append); }
+          else append(`  ✗ ${status}: ${JSON.stringify(data)}`,'log-error');
+        }).catch(()=>append('  ✗ network error','log-error')));
+      }
+    }
+    await Promise.all(promises);
+    setTimeout(()=>{
+      document.getElementById('checkout-log').style.display='none';
+      document.getElementById('modal-body').innerHTML=`<div class="success-banner"><div class="check">🎉</div>
+        <h3>Order Confirmed!</h3><p>All sale events registered with InventorySoft.<br>Inventory will reconcile within moments.</p></div>
+        <div class="btn-row"><button class="confirm-btn" onclick="finishCheckout()">Back to Shopping</button></div>`;
+    },700);
+  }
+  async function pollEvent(eventId,append){
+    for(let i=0;i<10;i++){
+      await new Promise(r=>setTimeout(r,400));
+      try{ const r=await fetch(`/proxy/events/${eventId}`); const d=await r.json(); logAPI('GET',`/events/${eventId.slice(0,8)}…`,r.status,d.status);
+        if(d.status==='COMPLETED'){ append(`  ⚡ ${eventId.slice(0,8)}… COMPLETED`,'log-success'); return; }
+        if(d.status==='FAILED'){ append(`  ⚠ ${eventId.slice(0,8)}… FAILED (${d.reason})`,'log-error'); return; }
+      }catch{}
+    }
+    append(`  ⏳ ${eventId.slice(0,8)}… still pending`,'log-pending');
+  }
+  function finishCheckout(){ cart=[]; updateCartUI(); closeCheckout(); loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); toast('Order complete! Inventory refreshed.'); }
+
+  // ── Restock (synchronous admin) ──
+  function openRestock(itemId,name){
+    document.getElementById('restock-body').innerHTML=`<h2>📦 Restock / Adjust</h2>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">${name} (ID ${itemId}) — fires synchronous <code>POST /admin/${itemId}</code>.</p>
+      <div class="field"><label>Direction</label><select id="rs-dir"><option value="INCREASE">INCREASE (restock)</option><option value="DECREASE">DECREASE (shrinkage)</option></select></div>
+      <div class="field"><label>Magnitude</label><input id="rs-mag" type="number" value="50" min="1"></div>
+      <div class="field"><label>Organization</label><select id="rs-org"><option value="351">351 · General Goods</option><option value="352">352 · Bakery</option><option value="353">353 · Deli</option></select></div>
+      <div id="rs-result" style="font-size:.85rem;margin-top:.5rem"></div>
+      <div class="btn-row"><button class="cancel-btn" onclick="closeRestock()">Cancel</button>
+        <button class="confirm-btn" onclick="submitRestock('${itemId}')">Submit</button></div>`;
+    document.getElementById('rs-org').value=currentOrg;
+    document.getElementById('restock-modal').classList.add('open');
+  }
+  function closeRestock(){ document.getElementById('restock-modal').classList.remove('open'); }
+  async function submitRestock(itemId){
+    const operatorDirection=document.getElementById('rs-dir').value;
+    const operatorMagnitude=parseInt(document.getElementById('rs-mag').value,10);
+    const organizationId=document.getElementById('rs-org').value;
+    const res=document.getElementById('rs-result');
+    const {status,data}=await apiPost(`/admin/${itemId}`,{operatorDirection,operatorMagnitude,organizationId});
+    if(status===200){ res.innerHTML=`<span style="color:var(--green2)">✓ ${data.previousStock} → ${data.newStock}</span>`;
+      toast('Stock updated ✓'); setTimeout(()=>{ closeRestock(); loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); },800); }
+    else res.innerHTML=`<span style="color:var(--red)">✗ ${status}: ${data.error||'error'}</span>`;
+  }
+
+  // ── Operations dashboard ──
+  async function loadOps(orgId,tabEl){
+    opsOrg=orgId;
+    if(tabEl){ document.querySelectorAll('#view-ops .org-tab').forEach(t=>t.classList.remove('active')); tabEl.classList.add('active'); }
+    document.getElementById('ops-org-label').textContent=orgId;
+    const [org,ts]=await Promise.all([ apiGet(`/organization/${orgId}`), apiGet(`/analytics/organization/${orgId}/timeseries?bucketMinutes=1`) ]);
+    const items=org.items||[];
+    const totalStock=items.reduce((s,i)=>s+i.stock,0);
+    const value=items.reduce((s,i)=>s+i.stock*i.price,0);
+    const low=items.filter(i=>i.stock<20).length;
+    const sold=(ts.points||[]).reduce((s,p)=>s+p.unitsSold,0);
+    document.getElementById('stat-stock').textContent=totalStock.toLocaleString();
+    document.getElementById('stat-sold').textContent=sold.toLocaleString();
+    document.getElementById('stat-value').textContent='$'+value.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('stat-low').textContent=low;
+    // populate load-test item dropdown
+    const sel=document.getElementById('lt-item');
+    sel.innerHTML=items.map(i=>`<option value="${i.itemId}">${i.name} (${i.stock})</option>`).join('');
+    drawChart(ts.points||[]);
+  }
+
+  function drawChart(points){
+    const c=document.getElementById('chart'); const dpr=window.devicePixelRatio||1;
+    const W=c.clientWidth, H=260; c.width=W*dpr; c.height=H*dpr; const ctx=c.getContext('2d'); ctx.scale(dpr,dpr);
+    ctx.clearRect(0,0,W,H);
+    const pad={l:50,r:20,t:20,b:30};
+    if(!points.length){ ctx.fillStyle='#7a7265'; ctx.font='14px DM Sans'; ctx.fillText('No movement recorded yet — make a sale or restock.',pad.l,H/2); return; }
+    const xs=points.map((_,i)=>i);
+    const maxStock=Math.max(...points.map(p=>p.totalStock),1);
+    const maxSold=Math.max(...points.map(p=>p.unitsSold),1);
+    const px=i=>pad.l+(W-pad.l-pad.r)*(points.length===1?0.5:i/(points.length-1));
+    const pyStock=v=>pad.t+(H-pad.t-pad.b)*(1-v/maxStock);
+    // grid + y labels
+    ctx.strokeStyle='#eee'; ctx.fillStyle='#999'; ctx.font='10px DM Sans';
+    for(let g=0;g<=4;g++){ const y=pad.t+(H-pad.t-pad.b)*g/4; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+      ctx.fillText(Math.round(maxStock*(1-g/4)),6,y+3); }
+    // sold bars
+    const bw=Math.max(2,(W-pad.l-pad.r)/points.length*0.5);
+    ctx.fillStyle='rgba(200,168,75,0.55)';
+    points.forEach((p,i)=>{ const h=(H-pad.t-pad.b)*(p.unitsSold/maxSold)*0.5; ctx.fillRect(px(i)-bw/2,H-pad.b-h,bw,h); });
+    // stock line
+    ctx.strokeStyle='#1a5c2e'; ctx.lineWidth=2.5; ctx.beginPath();
+    points.forEach((p,i)=>{ const x=px(i),y=pyStock(p.totalStock); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+    ctx.fillStyle='#1a5c2e'; points.forEach((p,i)=>{ ctx.beginPath(); ctx.arc(px(i),pyStock(p.totalStock),3,0,7); ctx.fill(); });
+    // legend
+    ctx.font='11px DM Sans'; ctx.fillStyle='#1a5c2e'; ctx.fillText('● total stock',pad.l,12);
+    ctx.fillStyle='#9a7d24'; ctx.fillText('▮ units sold',pad.l+90,12);
+  }
+
+  // ── Load / rate-limit simulation ──
+  let peakQueue=0;
+  async function runLoadTest(){
+    const count=Math.min(1000,Math.max(1,parseInt(document.getElementById('lt-count').value,10)||100));
+    const itemId=document.getElementById('lt-item').value;
+    const btn=document.getElementById('lt-run'); btn.disabled=true; btn.textContent='Firing…';
+    let sent=0,ok=0,limited=0; peakQueue=0;
+    const set=(id,v)=>document.getElementById(id).textContent=v;
+    set('lt-sent',0); set('lt-ok',0); set('lt-429',0); set('lt-peak',0);
+    const poll=setInterval(async()=>{ try{ const s=await (await fetch('/limiter-stats')).json();
+      set('lt-queue',s.queueDepth); peakQueue=Math.max(peakQueue,s.maxQueueDepth); set('lt-peak',peakQueue); }catch{} },200);
+    const promises=[];
+    for(let i=0;i<count;i++){
+      promises.push(fetch(`/proxy/item/${itemId}`,{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':uuid()},body:JSON.stringify({itemId,organizationId:opsOrg})})
+        .then(r=>{ sent++; if(r.status===202)ok++; else if(r.status===429)limited++; set('lt-sent',sent); set('lt-ok',ok); set('lt-429',limited);
+          document.getElementById('lt-meter').style.width=(sent/count*100)+'%'; }).catch(()=>{sent++;set('lt-sent',sent);}));
+    }
+    await Promise.all(promises);
+    clearInterval(poll);
+    const s=await (await fetch('/limiter-stats')).json(); set('lt-queue',s.queueDepth); set('lt-peak',Math.max(peakQueue,s.maxQueueDepth));
+    btn.disabled=false; btn.textContent='▶ Fire burst';
+    toast(`Burst done: ${ok} accepted, ${limited} rate-limited`);
+    setTimeout(()=>loadOps(opsOrg),1500);
+  }
+
+  let toastTimer;
+  function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2200); }
+
+  loadOrg('351',document.querySelector('#org-tabs .org-tab'));
+</script>
+</body>
+</html>

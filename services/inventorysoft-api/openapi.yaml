@@ -1,0 +1,284 @@
+openapi: 3.0.3
+info:
+  title: InventorySoft API
+  version: "1.0.0"
+  description: >
+    InventorySoft's inventory-tracking API for the ABC Supermarkets integration.
+
+    The API exposes synchronous read/admin endpoints and an **asynchronous**
+    sale-registration endpoint. All endpoints are rate limited to
+    **25 requests/second** (HTTP 429 on exceed).
+  contact:
+    name: InventorySoft Solutions Architecture
+servers:
+  - url: http://localhost:3001
+    description: Local Docker stack
+tags:
+  - name: Inventory
+    description: Read current stock levels
+  - name: Admin
+    description: Restock / shrinkage / corrections (synchronous)
+  - name: Sales
+    description: Register point-of-sale events (asynchronous)
+  - name: Analytics
+    description: Inventory movement over the working day
+  - name: System
+    description: Health & operational endpoints
+
+paths:
+  /item/{itemId}:
+    get:
+      tags: [Inventory]
+      summary: Get total inventory for a single item
+      description: Returns total stock for an item across all organizations. Synchronous.
+      parameters:
+        - $ref: "#/components/parameters/ItemId"
+      responses:
+        "200":
+          description: Item inventory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ItemInventory" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [Sales]
+      summary: Register a sale (asynchronous)
+      description: >
+        Registers a new sale and returns immediately with an `eventId`.
+        Inventory is decremented asynchronously by a background worker.
+        Poll `GET /events/{eventId}` for completion.
+
+
+        Supply an `Idempotency-Key` header to make client retries safe — a
+        repeated key returns the original event instead of double-counting.
+      parameters:
+        - $ref: "#/components/parameters/ItemId"
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string }
+          description: Optional client-generated key to dedupe retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaleRequest" }
+      responses:
+        "202":
+          description: Sale accepted for async processing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaleAccepted" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /organization/{organizationId}:
+    get:
+      tags: [Inventory]
+      summary: Get inventory for an entire organization
+      description: Returns all items for an organization with current stock. Synchronous.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      responses:
+        "200":
+          description: Organization inventory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrganizationInventory" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /admin/{itemId}:
+    post:
+      tags: [Admin]
+      summary: Increment or decrement stock (synchronous)
+      description: Restocking, shrinkage, or corrections. Returns 409 if a DECREASE would go negative.
+      parameters:
+        - $ref: "#/components/parameters/ItemId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminRequest" }
+      responses:
+        "200":
+          description: Stock updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /events/{eventId}:
+    get:
+      tags: [Sales]
+      summary: Poll an async sale event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Event status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaleEvent" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /analytics/organization/{organizationId}/timeseries:
+    get:
+      tags: [Analytics]
+      summary: Inventory level over the working day
+      description: >
+        Returns a time-bucketed view of total inventory and units sold for an
+        organization — the "track total inventory levels over the course of the
+        working day" requirement.
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - name: bucketMinutes
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1 }
+      responses:
+        "200":
+          description: Time series
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimeSeries" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness / readiness probe
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  db: { type: string, example: connected }
+
+components:
+  parameters:
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: string }
+      example: "92746661"
+    OrganizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema: { type: string }
+      example: "351"
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Invalid request body
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Operation would result in negative stock
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Rate limit exceeded (25 req/s)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    ItemInventory:
+      type: object
+      properties:
+        itemId: { type: string, example: "92746661" }
+        name: { type: string, example: "Whole Milk (1 Gallon)" }
+        price: { type: number, example: 4.99 }
+        totalStock: { type: integer, example: 120 }
+        stockByOrg:
+          type: object
+          additionalProperties: { type: integer }
+          example: { "351": 120 }
+    OrganizationInventory:
+      type: object
+      properties:
+        organizationId: { type: string, example: "351" }
+        organizationName: { type: string, example: "ABC Supermarkets – General Goods" }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemId: { type: string }
+              name: { type: string }
+              price: { type: number }
+              stock: { type: integer }
+    SaleRequest:
+      type: object
+      required: [organizationId]
+      properties:
+        itemId: { type: string, example: "92746661" }
+        organizationId: { type: string, example: "351" }
+    SaleAccepted:
+      type: object
+      properties:
+        eventId: { type: string, format: uuid }
+    SaleEvent:
+      type: object
+      properties:
+        status: { type: string, enum: [PENDING, COMPLETED, FAILED] }
+        itemId: { type: string }
+        organizationId: { type: string }
+        processedAt: { type: string, format: date-time, nullable: true }
+        reason: { type: string, nullable: true }
+    AdminRequest:
+      type: object
+      required: [operatorDirection, operatorMagnitude, organizationId]
+      properties:
+        operatorDirection: { type: string, enum: [INCREASE, DECREASE] }
+        operatorMagnitude: { type: integer, example: 50 }
+        organizationId: { type: string, example: "351" }
+    AdminResponse:
+      type: object
+      properties:
+        itemId: { type: string }
+        organizationId: { type: string }
+        previousStock: { type: integer }
+        newStock: { type: integer }
+        operatorDirection: { type: string }
+        operatorMagnitude: { type: integer }
+    TimeSeries:
+      type: object
+      properties:
+        organizationId: { type: string }
+        organizationName: { type: string }
+        bucketMinutes: { type: integer }
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              t: { type: string, format: date-time }
+              totalStock: { type: integer }
+              unitsSold: { type: integer }

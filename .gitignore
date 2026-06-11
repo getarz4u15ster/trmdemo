@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# draw.io backup files
+*.bkp
+.$*
+
+# Node
+node_modules/
+
+# Private interview prep docs
+docs/DEMO_SCRIPT.md
+docs/ASSESSMENT_CHECKLIST.md
+docs/TALK_TRACK.md
+docs/TALK_TRACK.pdf

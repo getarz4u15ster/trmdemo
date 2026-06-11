@@ -1,0 +1,64 @@
+# ============================================================================
+# ABC Supermarkets × InventorySoft — local integration stack
+#
+#   postgres   → inventory database (local analog of the customer's AWS RDS)
+#   api        → InventorySoft API (Express + pg, Swagger UI, async worker)
+#   storefront → ABC Supermarkets POS/web app (rate-limit-aware client)
+#
+# Bring it up:   docker compose up --build
+#   Storefront → http://localhost:3000
+#   API + docs → http://localhost:3001/docs
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trm-postgres
+    environment:
+      POSTGRES_USER: inventorysoft
+      POSTGRES_PASSWORD: inventorysoft
+      POSTGRES_DB: inventorysoft
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventorysoft -d inventorysoft"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./services/inventorysoft-api
+    container_name: trm-inventorysoft-api
+    environment:
+      PORT: "3001"
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: inventorysoft
+      PGPASSWORD: inventorysoft
+      PGDATABASE: inventorysoft
+      RATE_LIMIT: "25"
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  storefront:
+    build: ./services/storefront
+    container_name: trm-storefront
+    environment:
+      PORT: "3000"
+      INVENTORYSOFT_URL: "http://api:3001"
+      CLIENT_RATE: "20"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

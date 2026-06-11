@@ -1,0 +1,189 @@
+{
+  "info": {
+    "name": "InventorySoft API – ABC Supermarkets",
+    "description": "Mock Postman collection for InventorySoft API. Import this file into Postman or Bruno.\n\nBase URL variable: {{baseUrl}} = http://localhost:3001\n\nOrganization IDs:\n  351 = General Goods\n  352 = Bakery\n  353 = Deli",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001", "type": "string" },
+    { "key": "orgId",   "value": "351",                  "type": "string" },
+    { "key": "itemId",  "value": "92746661",              "type": "string" },
+    { "key": "eventId", "value": "",                      "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Inventory – Get Item",
+      "item": [
+        {
+          "name": "GET /item/:id – Whole Milk",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/item/92746661",
+            "description": "Synchronous. Retrieves total inventory across all orgs for a specific item.\n\nTry other item IDs:\n  92746661 Whole Milk\n  92746662 Sourdough Bread\n  92746663 Eggs\n  92746664 Cheddar Cheese\n  92746665 Chicken Breast\n  92746666 Pasta Sauce\n  92746667 Orange Juice\n  92746668 Croissants\n  92746669 Sliced Turkey\n  92746670 Sparkling Water"
+          }
+        },
+        {
+          "name": "GET /item/:id – (variable)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/item/{{itemId}}",
+            "description": "Uses the {{itemId}} collection variable. Change it in the Variables tab."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Inventory – Get Organization",
+      "item": [
+        {
+          "name": "GET /organization/351 – General Goods",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/organization/351",
+            "description": "Synchronous. Returns all items belonging to the General Goods org."
+          }
+        },
+        {
+          "name": "GET /organization/352 – Bakery",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/organization/352",
+            "description": "Synchronous. Returns all items belonging to the Bakery org."
+          }
+        },
+        {
+          "name": "GET /organization/353 – Deli",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/organization/353",
+            "description": "Synchronous. Returns all items belonging to the Deli org."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Admin – Update Stock",
+      "item": [
+        {
+          "name": "POST /admin/:id – Restock Item (INCREASE)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/92746661",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorDirection\": \"INCREASE\",\n  \"operatorMagnitude\": 50,\n  \"organizationId\": \"351\"\n}"
+            },
+            "description": "Synchronous. Increments stock of Whole Milk by 50 units in org 351 (General Goods)."
+          }
+        },
+        {
+          "name": "POST /admin/:id – Adjust Down (DECREASE)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/92746661",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorDirection\": \"DECREASE\",\n  \"operatorMagnitude\": 10,\n  \"organizationId\": \"351\"\n}"
+            },
+            "description": "Synchronous. Decrements stock of Whole Milk by 10 in org 351. Will return 409 if quantity is insufficient."
+          }
+        },
+        {
+          "name": "POST /admin/:id – Restock Bakery Croissants",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/92746668",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorDirection\": \"INCREASE\",\n  \"operatorMagnitude\": 24,\n  \"organizationId\": \"352\"\n}"
+            },
+            "description": "Restocks croissants in the Bakery org."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Sales – Register Sale (Async)",
+      "item": [
+        {
+          "name": "POST /item/:id – Register Sale",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.eventId) {",
+                  "  pm.collectionVariables.set('eventId', json.eventId);",
+                  "  console.log('eventId saved to collection variable:', json.eventId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/item/92746661",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"92746661\",\n  \"organizationId\": \"351\"\n}"
+            },
+            "description": "Asynchronous. Registers a sale of Whole Milk. Returns an eventId (UUID).\n\nThe post-request script saves the eventId to the {{eventId}} collection variable automatically."
+          }
+        },
+        {
+          "name": "GET /events/:eventId – Poll Sale Status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/events/{{eventId}}",
+            "description": "Bonus endpoint. Polls the status of an async sale event. Status will be PENDING then COMPLETED after ~0.5–1.5 seconds.\n\nThe {{eventId}} variable is automatically set when you run the 'Register Sale' request."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Error & Edge Cases",
+      "item": [
+        {
+          "name": "GET /item/:id – 404 Item Not Found",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/item/INVALID_ID",
+            "description": "Should return 404."
+          }
+        },
+        {
+          "name": "POST /admin/:id – 409 Insufficient Stock",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/92746661",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorDirection\": \"DECREASE\",\n  \"operatorMagnitude\": 99999,\n  \"organizationId\": \"351\"\n}"
+            },
+            "description": "Attempts to decrease stock by more than available. Should return 409."
+          }
+        },
+        {
+          "name": "POST /admin/:id – 400 Bad Direction",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/92746661",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"operatorDirection\": \"SUBTRACT\",\n  \"operatorMagnitude\": 5,\n  \"organizationId\": \"351\"\n}"
+            },
+            "description": "Uses an invalid operatorDirection value. Should return 400."
+          }
+        }
+      ]
+    }
+  ]
+}
