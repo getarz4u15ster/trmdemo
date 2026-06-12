@@ -166,6 +166,7 @@
     .risk-alert.sev-high .ra-sev { background:#f8d7da;color:#721c24; } .risk-alert.sev-medium .ra-sev { background:#fff3cd;color:#856404; } .risk-alert.sev-low .ra-sev { background:#e2e3e5;color:#383d41; }
     .risk-alert .ra-body { flex:1; } .risk-alert .ra-rule { font-size:.82rem;font-weight:600;margin-bottom:.1rem; }
     .risk-alert .ra-item { display:inline-block;font-size:.72rem;font-weight:600;color:var(--text);background:var(--warm);border:1px solid var(--border);padding:.08rem .4rem;border-radius:6px;margin-bottom:.25rem; }
+    .risk-alert .ra-item-click { cursor:pointer;transition:all .12s; } .risk-alert .ra-item-click:hover { background:var(--gold);border-color:var(--gold); }
     .risk-alert .ra-detail { font-size:.78rem;color:var(--muted);line-height:1.4; }
     .risk-alert .ra-meta { font-size:.7rem;color:var(--muted);white-space:nowrap;text-align:right; }
     .risk-alert .ra-score { font-weight:700;color:var(--text);font-size:1.05rem;line-height:1;cursor:help; }
@@ -177,6 +178,7 @@
     .ra-btn { font-size:.72rem;padding:.25rem .6rem;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;color:var(--text);transition:all .15s; }
     .ra-btn:hover { background:var(--warm); }
     .ra-btn-resolve { border-color:var(--green2);color:var(--green2); } .ra-btn-resolve:hover { background:var(--green);color:#fff;border-color:var(--green); }
+    .ra-btn-restock { border-color:var(--gold);color:#9a7d24; } .ra-btn-restock:hover { background:var(--gold);color:var(--green); }
     /* Ask-the-data chat */
     .chat-badge { font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:.15rem .45rem;border-radius:6px;background:#e2e3e5;color:#383d41;vertical-align:middle;margin-left:.4rem; }
     .chat-badge.live { background:#d4edda;color:#155724; }
@@ -191,6 +193,11 @@
     .chat-msg.user { align-self:flex-end;background:var(--green2);color:#fff;border-bottom-right-radius:3px; }
     .chat-msg.bot { align-self:flex-start;background:var(--warm);border:1px solid var(--border);border-bottom-left-radius:3px; }
     .chat-msg.bot.thinking { color:var(--muted);font-style:italic; }
+    .chat-actions { margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.4rem; }
+    .chat-action-btn { font-size:.74rem;font-weight:600;padding:.3rem .7rem;border:1.5px solid var(--gold);background:transparent;color:#9a7d24;border-radius:8px;cursor:pointer;transition:all .12s; }
+    .chat-action-btn:hover { background:var(--gold);color:var(--green); }
+    .chat-action-btn:disabled { cursor:default; }
+    .chat-action-btn.done { border-color:var(--green2);color:#fff;background:var(--green2); }
     .chat-used { margin-top:.4rem;display:flex;flex-wrap:wrap;gap:.3rem; }
     .chat-used code { font-size:.62rem;background:#fff;border:1px solid var(--border);border-radius:5px;padding:.05rem .35rem;color:var(--muted); }
     .chat-mode { font-size:.6rem;color:var(--muted);margin-top:.3rem;text-transform:uppercase;letter-spacing:.03em; }
@@ -507,7 +514,7 @@
   function finishCheckout(){ cart=[]; updateCartUI(); closeCheckout(); loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); toast('Order complete! Inventory refreshed.'); }
 
   // ── Restock (synchronous admin) ──
-  function openRestock(itemId,name){
+  function openRestock(itemId,name,org){
     document.getElementById('restock-body').innerHTML=`<h2>📦 Restock / Adjust</h2>
       <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">${name} (ID ${itemId}) — fires synchronous <code>POST /admin/${itemId}</code>.</p>
       <div class="field"><label>Direction</label><select id="rs-dir"><option value="INCREASE">INCREASE (restock)</option><option value="DECREASE">DECREASE (shrinkage)</option></select></div>
@@ -516,9 +523,12 @@
       <div id="rs-result" style="font-size:.85rem;margin-top:.5rem"></div>
       <div class="btn-row"><button class="cancel-btn" onclick="closeRestock()">Cancel</button>
         <button class="confirm-btn" onclick="submitRestock('${itemId}')">Submit</button></div>`;
-    document.getElementById('rs-org').value=currentOrg;
+    document.getElementById('rs-org').value=org||currentOrg;
     document.getElementById('restock-modal').classList.add('open');
+    setTimeout(()=>document.getElementById('rs-mag').focus(),50);
   }
+  // Restock straight from a risk alert (e.g. close out an oversell / out-of-stock flag).
+  function restockFromAlert(itemId,name,org){ openRestock(itemId,name||`Item ${itemId}`,org); }
   function closeRestock(){ document.getElementById('restock-modal').classList.remove('open'); }
   async function submitRestock(itemId){
     const operatorDirection=document.getElementById('rs-dir').value;
@@ -527,7 +537,10 @@
     const res=document.getElementById('rs-result');
     const {status,data}=await apiPost(`/admin/${itemId}`,{operatorDirection,operatorMagnitude,organizationId});
     if(status===200){ res.innerHTML=`<span style="color:var(--green2)">✓ ${data.previousStock} → ${data.newStock}</span>`;
-      toast('Stock updated ✓'); setTimeout(()=>{ closeRestock(); loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); },800); }
+      toast('Stock updated ✓'); setTimeout(()=>{ closeRestock();
+        if(document.getElementById('view-ops').classList.contains('active')){ loadOps(opsOrg); }
+        else { loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); }
+      },800); }
     else res.innerHTML=`<span style="color:var(--red)">✗ ${status}: ${data.error||'error'}</span>`;
   }
 
@@ -578,11 +591,14 @@
       const st=(a.status||'OPEN');
       const when=new Date(a.createdAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
       const statusBadge=`<span class="ra-status st-${st.toLowerCase()}">${st}</span>`;
+      const itemName=a.itemName||(a.itemId?`Item ${a.itemId}`:null);
+      const nmArg=(itemName||'').replace(/'/g,"\\'");
+      const restockCall=a.itemId?`restockFromAlert('${a.itemId}','${nmArg}','${a.organizationId||''}')`:'';
       let actions='';
       if(st==='OPEN') actions=`<button class="ra-btn" onclick="updateAlert('${a.id}','ACK')">Acknowledge</button><button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
       else if(st==='ACK') actions=`<button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
-      const itemName=a.itemName||(a.itemId?`Item ${a.itemId}`:null);
-      const itemChip=itemName?`<span class="ra-item" title="${a.itemId?('item '+a.itemId):''}">📦 ${itemName}${a.organizationName?` · ${a.organizationName}`:''}</span>`:'';
+      if(restockCall) actions+=`<button class="ra-btn ra-btn-restock" onclick="${restockCall}">📦 Restock</button>`;
+      const itemChip=itemName?`<span class="ra-item${a.itemId?' ra-item-click':''}" ${restockCall?`onclick="${restockCall}"`:''} title="${a.itemId?('Click to restock '+itemName):''}">📦 ${itemName}${a.organizationName?` · ${a.organizationName}`:''}</span>`:'';
       return `<div class="risk-alert sev-${sev} ${st==='RESOLVED'?'ra-resolved':''}">
         <span class="ra-sev">${a.severity}</span>
         <div class="ra-body"><div class="ra-rule">${RULE_LABELS[a.rule]||a.rule} ${statusBadge}</div>
@@ -631,12 +647,33 @@
       const d=await r.json();
       if(!r.ok) throw new Error(d.error||'failed');
       const used=(d.used||[]).map(u=>`<code title="${esc(u.tool)}">${esc(u.endpoint)}</code>`).join('');
-      const mode=d.mode&&d.mode.startsWith('llm')?`Answered by ${esc(d.mode.split(':')[1]||'LLM')} · grounded on live data`:'Answered by offline parser · grounded on live data';
+      const isProposal=d.mode==='proposal';
+      const mode=isProposal?'Proposed action · confirm to apply (INCREASE only)':
+        (d.mode&&d.mode.startsWith('llm')?`Answered by ${esc(d.mode.split(':')[1]||'LLM')} · grounded on live data`:'Answered by offline parser · grounded on live data');
+      const actionsHtml=(d.actions&&d.actions.length)?`<div class="chat-actions">${renderChatActions(d.actions)}</div>`:'';
       thinking.classList.remove('thinking');
-      thinking.innerHTML=`${esc(d.answer)}${used?`<div class="chat-used">${used}</div>`:''}<div class="chat-mode">${mode}</div>`;
+      thinking.innerHTML=`${esc(d.answer)}${actionsHtml}${used?`<div class="chat-used">${used}</div>`:''}<div class="chat-mode">${mode}</div>`;
     }catch(err){ thinking.classList.remove('thinking'); thinking.innerHTML='Sorry — I couldn\u2019t answer that just now.'; }
     finally{ btn.disabled=false; input.focus(); }
     return false;
+  }
+  // Human-in-the-loop: chat proposes restocks; the user clicks Confirm to apply.
+  const pendingActions={}; let actionSeq=0;
+  function renderChatActions(actions){
+    return actions.map(a=>{ const id='act'+(++actionSeq); pendingActions[id]=a;
+      return `<button class="chat-action-btn" id="${id}" onclick="confirmChatAction('${id}')">✓ Restock ${esc(a.itemName)} +${a.magnitude}</button>`;
+    }).join('');
+  }
+  async function confirmChatAction(id){
+    const a=pendingActions[id]; if(!a) return; const btn=document.getElementById(id); if(!btn||btn.disabled) return;
+    btn.disabled=true; const orig=btn.textContent; btn.textContent='Applying…';
+    try{
+      const r=await fetch('/chat/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})});
+      const d=await r.json(); if(!r.ok) throw new Error(d.error||'failed');
+      btn.textContent=`✓ ${a.itemName}: ${d.previousStock} → ${d.newStock}`; btn.classList.add('done');
+      toast('Restocked ✓'); loadAlerts();
+      if(document.getElementById('view-ops').classList.contains('active')) loadOps(opsOrg);
+    }catch(err){ btn.disabled=false; btn.textContent='Retry restock'; toast('Restock failed'); }
   }
 
   function fmtClock(t){ return new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); }

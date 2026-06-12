@@ -1,7 +1,7 @@
 const path = require("path");
 const express = require("express");
 const { RateLimiter } = require("./rateLimiter");
-const { chatAnswer, llmStatus } = require("./chat");
+const { chatAnswer, executeAction, llmStatus } = require("./chat");
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const INVENTORYSOFT_BASE = process.env.INVENTORYSOFT_URL || "http://localhost:3001";
@@ -57,6 +57,19 @@ app.post("/chat", async (req, res) => {
     res.json(out);
   } catch (e) {
     res.status(502).json({ error: "Could not answer right now.", detail: e.message });
+  }
+});
+
+// Executes a user-confirmed chat action (currently: restock / INCREASE only).
+// The chat itself only proposes; this is the explicit, validated write step.
+app.post("/chat/action", async (req, res) => {
+  const { action } = req.body || {};
+  if (!action || typeof action !== "object") return res.status(400).json({ error: "action is required." });
+  try {
+    const out = await limiter.schedule(() => executeAction(action));
+    res.json(out);
+  } catch (e) {
+    res.status(e.status || 502).json({ error: e.message || "Action failed." });
   }
 });
 

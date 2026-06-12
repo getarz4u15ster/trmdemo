@@ -63,6 +63,9 @@ check "GET /chat-info 200"        200 "$(code "$STORE/chat-info")"
 check "POST /chat 200"            200 "$(code -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"question":"what is low on stock?","organizationId":"351"}')"
 check "POST /chat no body 400"    400 "$(code -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"organizationId":"351"}')"
 check "chat returns an answer"    "yes" "$(curl -s -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"question":"top sellers today?","organizationId":"351"}' | grep -q '"answer"' && echo yes || echo no)"
+check "restock req → proposal"    "yes" "$(curl -s -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"question":"restock Whole Milk by 10","organizationId":"351"}' | grep -q '"type":"restock"' && echo yes || echo no)"
+check "confirm action 200"        200 "$(code -X POST "$STORE/chat/action" -H 'Content-Type: application/json' -d '{"action":{"type":"restock","itemId":"92746661","organizationId":"351","magnitude":1}}')"
+check "action unsupported 400"    400 "$(code -X POST "$STORE/chat/action" -H 'Content-Type: application/json' -d '{"action":{"type":"delete","itemId":"92746661","organizationId":"351","magnitude":1}}')"
 
 echo
 echo "──────────────────────────────"

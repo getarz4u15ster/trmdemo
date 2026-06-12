@@ -27,6 +27,19 @@ async function apiGet(p) {
   return r.json();
 }
 
+async function apiPost(p, body) {
+  const r = await fetch(`${INVENTORYSOFT_BASE}${p}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  return { status: r.status, data };
+}
+
+const DEFAULT_RESTOCK = parseInt(process.env.CHAT_DEFAULT_RESTOCK || "50", 10);
+const MAX_RESTOCK = parseInt(process.env.CHAT_MAX_RESTOCK || "10000", 10);
+
 // ─── Read-only tool allow-list (maps 1:1 to existing endpoints) ─────────────
 const TOOLS = {
   get_inventory: (org) => apiGet(`/organization/${encodeURIComponent(org)}`),
@@ -285,7 +298,98 @@ async function composeWithLLM(question, findings) {
   return res.text || null;
 }
 
+// ─── Write path (human-in-the-loop): chat only *proposes* a restock; the user
+// confirms, then executeAction() performs it. INCREASE-only, bounded, validated.
+function isRestockIntent(q) {
+  return /\b(restock|replenish|refill|top[ -]?up|stock up|order more|bring .*back)\b/i.test(q) ||
+    /\b(add|increase)\b.*\bstock\b/i.test(q) ||
+    /\bstock\b.*\b(up|more)\b/i.test(q);
+}
+
+function parseMagnitude(q) {
+  const m = q.match(/\b(\d{1,5})\b/);
+  const n = m ? parseInt(m[1], 10) : DEFAULT_RESTOCK;
+  return Math.max(1, Math.min(MAX_RESTOCK, n));
+}
+
+async function proposeRestock(question, org) {
+  const inv = await TOOLS.get_inventory(org);
+  const used = [{ tool: "get_inventory", endpoint: `/organization/${org}` }];
+  const orgName = inv.organizationName || org;
+  const magnitude = parseMagnitude(question);
+  const q = question.toLowerCase();
+
+  // Scope: a bulk phrase ("all / everything / out of stock / low") vs a named item.
+  let targets = [];
+  if (/out of stock|oversell|phantom|sold out/.test(q)) {
+    targets = inv.items.filter((i) => Number(i.stock) <= 0);
+  } else if (/\b(all|every|everything|each|low)\b/.test(q)) {
+    targets = inv.items.filter((i) => Number(i.stock) <= LOW_STOCK);
+  } else {
+    const match = inv.items.find((i) => q_includes(question, i.name));
+    if (match) targets = [match];
+  }
+
+  if (!targets.length) {
+    const named = /out of stock|all|every|everything|each|low/.test(q);
+    const answer = named
+      ? `Nothing is currently low or out of stock in ${orgName}, so there's nothing to restock.`
+      : `I couldn't tell which item to restock. Try naming it, e.g. "restock Free-Range Eggs by 100", or "restock everything out of stock".`;
+    return { answer, actions: [], used, mode: "proposal", findings: {} };
+  }
+
+  const actions = targets.map((i) => ({
+    type: "restock",
+    itemId: i.itemId,
+    itemName: i.name,
+    organizationId: org,
+    magnitude,
+    currentStock: Number(i.stock),
+  }));
+
+  const answer =
+    actions.length === 1
+      ? `Ready to restock ${actions[0].itemName} by ${actions[0].magnitude} units in ${orgName} (currently ${actions[0].currentStock}). Confirm to apply.`
+      : `Ready to restock ${actions.length} item(s) in ${orgName} by ${magnitude} units each: ${actions
+          .map((a) => `${a.itemName} (${a.currentStock})`)
+          .join(", ")}. Confirm each below.`;
+
+  return { answer, actions, used, mode: "proposal", findings: {} };
+}
+
+// Performs a confirmed restock. Hard-codes INCREASE so chat can never decrement.
+function badRequest(msg) {
+  const e = new Error(msg);
+  e.status = 400;
+  return e;
+}
+
+async function executeAction(action) {
+  if (!action || action.type !== "restock") throw badRequest("Unsupported action (only 'restock' is allowed).");
+  const itemId = String(action.itemId || "");
+  const organizationId = String(action.organizationId || "");
+  const magnitude = parseInt(action.magnitude, 10);
+  if (!itemId || !organizationId) throw badRequest("itemId and organizationId are required.");
+  if (!Number.isInteger(magnitude) || magnitude < 1 || magnitude > MAX_RESTOCK)
+    throw badRequest(`magnitude must be an integer between 1 and ${MAX_RESTOCK}.`);
+
+  const { status, data } = await apiPost(`/admin/${encodeURIComponent(itemId)}`, {
+    operatorDirection: "INCREASE",
+    operatorMagnitude: magnitude,
+    organizationId,
+  });
+  if (status !== 200) {
+    const e = new Error(data.error || `admin returned ${status}`);
+    e.status = status;
+    throw e;
+  }
+  return { ok: true, itemId, organizationId, magnitude, previousStock: data.previousStock, newStock: data.newStock };
+}
+
 async function chatAnswer(question, organizationId) {
+  // A restock request returns a *proposal* (with confirm actions), never a write.
+  if (isRestockIntent(question)) return proposeRestock(question, organizationId);
+
   const gathered = await gather(question, organizationId);
   let mode = "deterministic";
   let answer = composeDeterministic(gathered);
@@ -308,6 +412,7 @@ async function chatAnswer(question, organizationId) {
 
 module.exports = {
   chatAnswer,
+  executeAction,
   llmStatus,
   llmEnabled: () => Boolean(LLM_PROVIDER && LLM_API_KEY),
 };
