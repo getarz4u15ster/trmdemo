@@ -363,7 +363,9 @@ components:
       properties:
         id: { type: string }
         itemId: { type: string, nullable: true }
+        itemName: { type: string, nullable: true, description: Human-readable item name (joined from items) }
         organizationId: { type: string, nullable: true }
+        organizationName: { type: string, nullable: true, description: Human-readable organization name }
         eventId: { type: string, format: uuid, nullable: true }
         rule: { type: string, enum: [SALE_VELOCITY, OVERSELL_ATTEMPT, LARGE_SHRINKAGE] }
         severity: { type: string, enum: [LOW, MEDIUM, HIGH] }

@@ -149,7 +149,11 @@
     .risk-live { font-size:.7rem;color:#c0392b;font-weight:700;vertical-align:middle;animation:pulse 1.6s ease-in-out infinite; }
     @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
     .risk-summary { display:flex;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap; }
-    .risk-pill { font-size:.78rem;padding:.3rem .7rem;border-radius:20px;font-weight:500;border:1px solid var(--border); }
+    .risk-pill { font-size:.78rem;padding:.3rem .7rem;border-radius:20px;font-weight:500;border:1px solid var(--border);cursor:pointer;user-select:none;transition:filter .12s,box-shadow .12s,transform .06s;opacity:.7; }
+    .risk-pill:hover { filter:brightness(.97);opacity:1; }
+    .risk-pill:active { transform:scale(.97); }
+    .risk-pill.active { opacity:1;box-shadow:0 0 0 2px var(--text) inset;font-weight:700; }
+    .risk-pill.pill-all { background:var(--warm); }
     .risk-pill b { margin-left:.3rem;font-weight:700; }
     .sev-high { background:#f8d7da;color:#721c24;border-color:#f1b0b7; }
     .sev-medium { background:#fff3cd;color:#856404; }
@@ -161,6 +165,7 @@
     .risk-alert .ra-sev { font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:.15rem .45rem;border-radius:6px;white-space:nowrap; }
     .risk-alert.sev-high .ra-sev { background:#f8d7da;color:#721c24; } .risk-alert.sev-medium .ra-sev { background:#fff3cd;color:#856404; } .risk-alert.sev-low .ra-sev { background:#e2e3e5;color:#383d41; }
     .risk-alert .ra-body { flex:1; } .risk-alert .ra-rule { font-size:.82rem;font-weight:600;margin-bottom:.1rem; }
+    .risk-alert .ra-item { display:inline-block;font-size:.72rem;font-weight:600;color:var(--text);background:var(--warm);border:1px solid var(--border);padding:.08rem .4rem;border-radius:6px;margin-bottom:.25rem; }
     .risk-alert .ra-detail { font-size:.78rem;color:var(--muted);line-height:1.4; }
     .risk-alert .ra-meta { font-size:.7rem;color:var(--muted);white-space:nowrap;text-align:right; }
     .risk-alert .ra-score { font-weight:700;color:var(--text); }
@@ -241,9 +246,10 @@
         oversell/phantom-inventory attempts, and large manual shrinkage — and anomalies surface here for triage
         (backed by the immutable ledger as an audit trail). Fire a burst or do a large <code>DECREASE</code> restock to trigger one.</p>
       <div class="risk-summary">
-        <span class="risk-pill sev-high">High <b id="risk-high">0</b></span>
-        <span class="risk-pill sev-medium">Medium <b id="risk-medium">0</b></span>
-        <span class="risk-pill sev-low">Low <b id="risk-low">0</b></span>
+        <span class="risk-pill pill-all active" data-sev="" onclick="setRiskFilter('')" title="Show all severities">All <b id="risk-all">0</b></span>
+        <span class="risk-pill sev-high" data-sev="HIGH" onclick="setRiskFilter('HIGH')" title="Filter to high severity">High <b id="risk-high">0</b></span>
+        <span class="risk-pill sev-medium" data-sev="MEDIUM" onclick="setRiskFilter('MEDIUM')" title="Filter to medium severity">Medium <b id="risk-medium">0</b></span>
+        <span class="risk-pill sev-low" data-sev="LOW" onclick="setRiskFilter('LOW')" title="Filter to low severity">Low <b id="risk-low">0</b></span>
       </div>
       <div id="risk-feed" class="risk-feed"><div class="risk-empty">No alerts yet — the stream is clean.</div></div>
     </div>
@@ -506,16 +512,24 @@
 
   // ── Risk & loss-prevention feed ──
   const RULE_LABELS={ SALE_VELOCITY:'Sale-velocity spike', OVERSELL_ATTEMPT:'Oversell / phantom inventory', LARGE_SHRINKAGE:'Large manual shrinkage' };
+  let riskFilter='';
+  function setRiskFilter(sev){
+    riskFilter=(riskFilter===sev)?'':sev; // click the active pill again to clear
+    document.querySelectorAll('#view-ops .risk-pill').forEach(p=>p.classList.toggle('active',(p.dataset.sev||'')===riskFilter));
+    loadAlerts();
+  }
   async function loadAlerts(){
     let data;
-    try{ data=await apiGet(`/alerts?organizationId=${opsOrg}&limit=50`); }catch{ return; }
+    const q=`/alerts?organizationId=${opsOrg}&limit=50${riskFilter?`&severity=${riskFilter}`:''}`;
+    try{ data=await apiGet(q); }catch{ return; }
     const s=data.summary||{};
     document.getElementById('risk-high').textContent=s.HIGH||0;
     document.getElementById('risk-medium').textContent=s.MEDIUM||0;
     document.getElementById('risk-low').textContent=s.LOW||0;
+    document.getElementById('risk-all').textContent=(s.HIGH||0)+(s.MEDIUM||0)+(s.LOW||0);
     const feed=document.getElementById('risk-feed');
     const alerts=data.alerts||[];
-    if(!alerts.length){ feed.innerHTML='<div class="risk-empty">No alerts yet — the stream is clean.</div>'; return; }
+    if(!alerts.length){ feed.innerHTML=`<div class="risk-empty">${riskFilter?`No ${riskFilter.toLowerCase()}-severity alerts.`:'No alerts yet — the stream is clean.'}</div>`; return; }
     feed.innerHTML=alerts.map(a=>{
       const sev=(a.severity||'LOW').toLowerCase();
       const st=(a.status||'OPEN');
@@ -524,9 +538,12 @@
       let actions='';
       if(st==='OPEN') actions=`<button class="ra-btn" onclick="updateAlert('${a.id}','ACK')">Acknowledge</button><button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
       else if(st==='ACK') actions=`<button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
+      const itemName=a.itemName||(a.itemId?`Item ${a.itemId}`:null);
+      const itemChip=itemName?`<span class="ra-item" title="${a.itemId?('item '+a.itemId):''}">📦 ${itemName}${a.organizationName?` · ${a.organizationName}`:''}</span>`:'';
       return `<div class="risk-alert sev-${sev} ${st==='RESOLVED'?'ra-resolved':''}">
         <span class="ra-sev">${a.severity}</span>
         <div class="ra-body"><div class="ra-rule">${RULE_LABELS[a.rule]||a.rule} ${statusBadge}</div>
+          ${itemChip}
           <div class="ra-detail">${a.detail}</div>
           ${actions?`<div class="ra-actions">${actions}</div>`:''}</div>
         <div class="ra-meta"><div class="ra-score">${a.score}</div><div>${when}</div></div>

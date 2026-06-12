@@ -278,16 +278,20 @@ app.get("/alerts", async (req, res) => {
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const where = [];
   const params = [];
-  if (organizationId) { params.push(organizationId); where.push(`organization_id = $${params.length}`); }
-  if (status) { params.push(status); where.push(`status = $${params.length}`); }
-  if (severity) { params.push(severity); where.push(`severity = $${params.length}`); }
+  if (organizationId) { params.push(organizationId); where.push(`ra.organization_id = $${params.length}`); }
+  if (status) { params.push(status); where.push(`ra.status = $${params.length}`); }
+  if (severity) { params.push(severity); where.push(`ra.severity = $${params.length}`); }
   params.push(limit);
   const rows = await query(
-    `SELECT id, item_id AS "itemId", organization_id AS "organizationId", event_id AS "eventId",
-            rule, severity, score, detail, status, created_at AS "createdAt"
-       FROM risk_alerts
+    `SELECT ra.id, ra.item_id AS "itemId", i.name AS "itemName",
+            ra.organization_id AS "organizationId", o.name AS "organizationName",
+            ra.event_id AS "eventId", ra.rule, ra.severity, ra.score, ra.detail,
+            ra.status, ra.created_at AS "createdAt"
+       FROM risk_alerts ra
+       LEFT JOIN items i ON i.id = ra.item_id
+       LEFT JOIN organizations o ON o.id = ra.organization_id
        ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ORDER BY created_at DESC
+      ORDER BY ra.created_at DESC
       LIMIT $${params.length}`,
     params
   );
@@ -309,13 +313,19 @@ app.post("/alerts/:id", async (req, res) => {
   if (!["OPEN", "ACK", "RESOLVED"].includes(status)) {
     return res.status(400).json({ error: "status must be OPEN, ACK, or RESOLVED." });
   }
+  const upd = await query(`UPDATE risk_alerts SET status = $1 WHERE id = $2 RETURNING id`, [status, id]);
+  if (upd.rowCount === 0) return res.status(404).json({ error: "Alert not found." });
   const r = await query(
-    `UPDATE risk_alerts SET status = $1 WHERE id = $2
-     RETURNING id, item_id AS "itemId", organization_id AS "organizationId",
-               rule, severity, score, detail, status, created_at AS "createdAt"`,
-    [status, id]
+    `SELECT ra.id, ra.item_id AS "itemId", i.name AS "itemName",
+            ra.organization_id AS "organizationId", o.name AS "organizationName",
+            ra.event_id AS "eventId", ra.rule, ra.severity, ra.score, ra.detail,
+            ra.status, ra.created_at AS "createdAt"
+       FROM risk_alerts ra
+       LEFT JOIN items i ON i.id = ra.item_id
+       LEFT JOIN organizations o ON o.id = ra.organization_id
+      WHERE ra.id = $1`,
+    [id]
   );
-  if (r.rowCount === 0) return res.status(404).json({ error: "Alert not found." });
   res.json(r.rows[0]);
 });
 

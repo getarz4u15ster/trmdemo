@@ -108,7 +108,7 @@ Three containers, one `docker compose up`:
 | **Inventory freshness / lag** | UI re-fetches org inventory after checkout and polls `GET /events/:id` to show eventual consistency |
 | **Track inventory over the working day** | Append-only `inventory_ledger` + `GET /analytics/.../timeseries` powering a stock-vs-sold chart with 12-hour time axis and a hover tooltip showing the per-item (`soldByItem`) breakdown for each interval |
 | **Error handling (409)** | `POST /admin` returns 409 on negative stock; UI surfaces it inline |
-| **Real-time risk / loss prevention** *(extension)* | A monitoring engine scores every stock movement against rules — sale-velocity spikes, oversell/phantom inventory, large shrinkage — raising scored `risk_alerts` with a triage workflow (acknowledge / resolve) shown live on the Ops dashboard. Mirrors a transaction-monitoring system applied to retail loss prevention |
+| **Real-time risk / loss prevention** *(extension)* | A monitoring engine scores every stock movement against rules — sale-velocity spikes, oversell/phantom inventory, large shrinkage — raising scored `risk_alerts` with a triage workflow (acknowledge / resolve) shown live on the Ops dashboard. Each alert names the affected item + organization, and the feed is filterable by severity (High / Medium / Low). Mirrors a transaction-monitoring system applied to retail loss prevention |
 | **Extensibility to AWS** | See mapping below — every local component has a 1:1 managed-service target |
 
 ---
