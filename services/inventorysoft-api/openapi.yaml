@@ -229,6 +229,102 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /alerts/{id}/timeline:
+    get:
+      tags: [Risk]
+      summary: Case file — incident timeline + ledger evidence
+      description: >-
+        Returns the alert, a reconstructed case timeline (raised → acknowledged →
+        resolved), and the inventory-ledger movements for the item/org in a window
+        around the incident — the evidence behind the score. Powers the exportable
+        case report in the dashboard.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alert: { $ref: "#/components/schemas/Alert" }
+                  timeline:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts: { type: string, format: date-time }
+                        event: { type: string, example: RAISED }
+                        detail: { type: string }
+                  ledger:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        delta: { type: integer }
+                        reason: { type: string }
+                        balance: { type: integer }
+                        createdAt: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /demo/scenario:
+    post:
+      tags: [Risk]
+      summary: Trigger a deterministic loss-prevention scenario (demo helper)
+      description: >-
+        Deterministically fires exactly one risk rule so a live demo never depends
+        on hand-timed bursts. Writes through the same tables and calls the same risk
+        evaluators as organic traffic. `velocity` = sale-velocity spike (scan abuse /
+        coordinated checkout), `phantom` = oversell on an out-of-stock item, and
+        `shrinkage` = a large manual write-down.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, organizationId]
+              properties:
+                type: { type: string, enum: [velocity, phantom, shrinkage] }
+                organizationId: { type: string, example: "351" }
+      responses:
+        "200":
+          description: Scenario executed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scenario: { type: string }
+                  itemId: { type: string }
+                  itemName: { type: string }
+                  organizationId: { type: string }
+                  alertId: { type: string, nullable: true }
+                  deduped: { type: boolean, description: True when a recent identical alert suppressed a duplicate }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /stream:
+    get:
+      tags: [System]
+      summary: Real-time event stream (Server-Sent Events)
+      description: >-
+        A long-lived `text/event-stream` that pushes domain events as they happen —
+        `sale` (completed/failed), `stock` (level changed), `alert` (new risk alert),
+        `alert-update`/`alert-resolved` (case status). Dashboards subscribe so the
+        risk feed and tiles update live instead of polling. Maps to an API Gateway
+        WebSocket / EventBridge fan-out in production.
+      responses:
+        "200":
+          description: An event stream (Content-Type: text/event-stream)
+          content:
+            text/event-stream:
+              schema: { type: string }
+
   /health:
     get:
       tags: [System]

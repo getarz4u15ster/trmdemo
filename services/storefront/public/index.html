@@ -158,6 +158,40 @@
     .sev-high { background:#f8d7da;color:#721c24;border-color:#f1b0b7; }
     .sev-medium { background:#fff3cd;color:#856404; }
     .sev-low { background:#e2e3e5;color:#383d41; }
+    .stat-clickable { cursor:pointer;transition:transform .08s,box-shadow .12s,border-color .12s; }
+    .stat-clickable:hover { transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.08);border-color:var(--accent,#3b82f6); }
+    .stat-hint { font-size:.66rem;font-weight:700;color:var(--accent,#3b82f6);text-transform:uppercase;letter-spacing:.03em;opacity:.85; }
+    .ls-list { display:flex;flex-direction:column;gap:.4rem;max-height:50vh;overflow-y:auto; }
+    .ls-row { display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px; }
+    .ls-name { flex:1;font-size:.88rem;font-weight:600; }
+    .ls-badge { font-size:.68rem;font-weight:800;padding:.15rem .5rem;border-radius:6px; }
+    .ls-out { background:#f8d7da;color:#721c24; }
+    .ls-low { background:#fff3cd;color:#856404; }
+    .scenario-row { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem; }
+    .scenario-label { font-size:.78rem;color:var(--muted);font-weight:600; }
+    .scn-btn { font-size:.78rem;padding:.4rem .8rem;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-weight:600;transition:filter .12s,transform .06s,box-shadow .12s; }
+    .scn-btn:hover { filter:brightness(.97);box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .scn-btn:active { transform:scale(.97); }
+    .scn-btn:disabled { opacity:.55;cursor:wait; }
+    .scn-orc { background:#fdecea;border-color:#f1b0b7;color:#721c24; }
+    .scn-phantom { background:#fff3cd;border-color:#ffe08a;color:#856404; }
+    .scn-shrink { background:#e7f0fb;border-color:#b6d4fe;color:#1c4e80; }
+    .modal-wide { max-width:680px;width:92vw; }
+    .case-head { display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:.6rem; }
+    .case-sev { font-size:.7rem;font-weight:800;padding:.15rem .5rem;border-radius:6px; }
+    .case-meta { font-size:.82rem;color:var(--muted);margin-bottom:1rem; }
+    .case-section-title { font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:1rem 0 .4rem; }
+    .case-timeline { list-style:none;padding:0;margin:0;border-left:2px solid var(--border); }
+    .case-timeline li { position:relative;padding:.1rem 0 .7rem 1rem;font-size:.85rem; }
+    .case-timeline li::before { content:'';position:absolute;left:-7px;top:.35rem;width:10px;height:10px;border-radius:50%;background:var(--text); }
+    .case-tl-event { font-weight:700;margin-right:.4rem; }
+    .case-tl-ts { color:var(--muted);font-size:.76rem; }
+    .case-ledger { width:100%;border-collapse:collapse;font-size:.8rem; }
+    .case-ledger th,.case-ledger td { border-bottom:1px solid var(--border);padding:.35rem .5rem;text-align:left; }
+    .case-ledger th { color:var(--muted);font-weight:700; }
+    .case-ledger .delta-neg { color:var(--red); }
+    .case-ledger .delta-pos { color:var(--green2); }
+    .case-actions { display:flex;gap:.5rem;justify-content:flex-end;margin-top:1.2rem;flex-wrap:wrap; }
     .risk-view { display:inline-flex;gap:0;margin-bottom:.8rem;border:1px solid var(--border);border-radius:8px;overflow:hidden; }
     .rv-btn { font-size:.74rem;padding:.3rem .8rem;background:#fff;border:none;border-right:1px solid var(--border);cursor:pointer;color:var(--muted);font-weight:500;transition:background .12s,color .12s; }
     .rv-btn:last-child { border-right:none; }
@@ -267,7 +301,7 @@
       <div class="stat-card"><div class="label">Total Units in Stock</div><div class="value" id="stat-stock">—</div></div>
       <div class="stat-card"><div class="label">Units Sold Today</div><div class="value" id="stat-sold">—</div></div>
       <div class="stat-card"><div class="label">Inventory Value</div><div class="value" id="stat-value">—</div></div>
-      <div class="stat-card"><div class="label">SKUs Low/Out</div><div class="value" id="stat-low">—</div></div>
+      <div class="stat-card stat-clickable" onclick="showLowStock()" title="Click to see which SKUs are low or out of stock"><div class="label">SKUs Low/Out <span class="stat-hint">view ›</span></div><div class="value" id="stat-low">—</div></div>
     </div>
 
     <div class="panel">
@@ -302,7 +336,13 @@
       <h3>Risk &amp; Loss Prevention <span id="risk-live" class="risk-live">● live</span></h3>
       <p class="sub">Every stock movement is scored in real time against loss-prevention rules — sale-velocity spikes,
         oversell/phantom-inventory attempts, and large manual shrinkage — and anomalies surface here for triage
-        (backed by the immutable ledger as an audit trail). Fire a burst or do a large <code>DECREASE</code> restock to trigger one.</p>
+        (backed by the immutable ledger as an audit trail). Alerts stream in live; click a scenario to trigger one on cue.</p>
+      <div class="scenario-row">
+        <span class="scenario-label">Simulate:</span>
+        <button class="scn-btn scn-orc" onclick="fireScenario('velocity',this)" title="Burst of sales on one item — scan abuse / coordinated checkout">🛒 ORC attack</button>
+        <button class="scn-btn scn-phantom" onclick="fireScenario('phantom',this)" title="Sale attempted on an out-of-stock item — phantom inventory / theft">👻 Phantom inventory</button>
+        <button class="scn-btn scn-shrink" onclick="fireScenario('shrinkage',this)" title="Large manual write-down — insider shrinkage">📉 Insider shrinkage</button>
+      </div>
       <div class="risk-summary">
         <span class="risk-pill pill-all active" data-sev="" onclick="setRiskFilter('')" title="Show all severities">All <b id="risk-all">0</b></span>
         <span class="risk-pill sev-high" data-sev="HIGH" onclick="setRiskFilter('HIGH')" title="Filter to high severity">High <b id="risk-high">0</b></span>
@@ -350,6 +390,8 @@
 
 <div class="modal-overlay" id="checkout-modal"><div class="modal" id="modal-body"></div></div>
 <div class="modal-overlay" id="restock-modal"><div class="modal" id="restock-body"></div></div>
+<div class="modal-overlay" id="case-modal"><div class="modal modal-wide" id="case-body"></div></div>
+<div class="modal-overlay" id="lowstock-modal"><div class="modal" id="lowstock-body"></div></div>
 <div id="toast"></div>
 <div id="chart-tip"></div>
 
@@ -574,7 +616,8 @@
     const items=org.items||[];
     const totalStock=items.reduce((s,i)=>s+i.stock,0);
     const value=items.reduce((s,i)=>s+i.stock*i.price,0);
-    const low=items.filter(i=>i.stock<20).length;
+    _lowStockItems=items.filter(i=>i.stock<LOW_STOCK_THRESHOLD).sort((a,b)=>a.stock-b.stock); // out (0) first
+    const low=_lowStockItems.length;
     const sold=(ts.points||[]).reduce((s,p)=>s+p.unitsSold,0);
     document.getElementById('stat-stock').textContent=totalStock.toLocaleString();
     document.getElementById('stat-sold').textContent=sold.toLocaleString();
@@ -586,6 +629,35 @@
     drawChart(ts.points||[]);
     loadAlerts();
   }
+
+  // ── Low / out-of-stock SKU drill-down ──
+  const LOW_STOCK_THRESHOLD=20; // matches the reorder threshold used in the tile count
+  let _lowStockItems=[];
+  function showLowStock(){
+    const body=document.getElementById('lowstock-body');
+    const orgName=ORG_NAMES[opsOrg]||('Org '+opsOrg);
+    if(!_lowStockItems.length){
+      body.innerHTML=`<h2>SKUs Low / Out <small style="font-weight:400;color:var(--muted)">${orgName}</small></h2>
+        <p style="color:var(--muted)">All SKUs are healthy — every item is at or above the ${LOW_STOCK_THRESHOLD}-unit reorder threshold.</p>
+        <div class="case-actions"><button class="cancel-btn" onclick="closeLowStock()">Close</button></div>`;
+    }else{
+      const rows=_lowStockItems.map(i=>{
+        const out=i.stock<=0;
+        const badge=out?`<span class="ls-badge ls-out">OUT</span>`:`<span class="ls-badge ls-low">LOW · ${i.stock}</span>`;
+        const nm=(i.name||'').replace(/'/g,"\\'");
+        return `<div class="ls-row"><span class="ls-name">${EMOJIS[i.itemId]||'📦'} ${i.name}</span>${badge}<button class="ra-btn ra-btn-restock" onclick="restockFromLow('${i.itemId}','${nm}')">📦 Restock</button></div>`;
+      }).join('');
+      const outN=_lowStockItems.filter(i=>i.stock<=0).length;
+      const lowN=_lowStockItems.length-outN;
+      body.innerHTML=`<h2>SKUs Low / Out <small style="font-weight:400;color:var(--muted)">${orgName}</small></h2>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:.8rem">${outN} out of stock · ${lowN} below the ${LOW_STOCK_THRESHOLD}-unit reorder threshold. Restock any item inline.</p>
+        <div class="ls-list">${rows}</div>
+        <div class="case-actions"><button class="cancel-btn" onclick="closeLowStock()">Close</button></div>`;
+    }
+    document.getElementById('lowstock-modal').classList.add('open');
+  }
+  function closeLowStock(){ document.getElementById('lowstock-modal').classList.remove('open'); }
+  function restockFromLow(itemId,name){ closeLowStock(); openRestock(itemId,name||`Item ${itemId}`,opsOrg); }
 
   // ── Risk & loss-prevention feed ──
   const RULE_LABELS={ SALE_VELOCITY:'Sale-velocity spike', OVERSELL_ATTEMPT:'Oversell / phantom inventory', LARGE_SHRINKAGE:'Large manual shrinkage' };
@@ -631,6 +703,7 @@
       if(st==='OPEN') actions=`<button class="ra-btn" onclick="updateAlert('${a.id}','ACK')">Acknowledge</button><button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
       else if(st==='ACK') actions=`<button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
       if(restockCall) actions+=`<button class="ra-btn ra-btn-restock" onclick="${restockCall}">📦 Restock</button>`;
+      actions+=`<button class="ra-btn" onclick="openCase('${a.id}')" title="Open case file: timeline + ledger evidence, exportable">🗂 Case</button>`;
       const itemChip=itemName?`<span class="ra-item${a.itemId?' ra-item-click':''}" ${restockCall?`onclick="${restockCall}"`:''} title="${a.itemId?('Click to restock '+itemName):''}">📦 ${itemName}${a.organizationName?` · ${a.organizationName}`:''}</span>`:'';
       const resLine=(st==='RESOLVED'&&a.resolution)?`<div class="ra-resolution">✓ ${a.resolution}</div>`:'';
       return `<div class="risk-alert sev-${sev} ${st==='RESOLVED'?'ra-resolved':''}">
@@ -806,9 +879,108 @@
   let toastTimer;
   function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2200); }
 
+  // ── Demo scenarios: one-click loss-prevention storylines (deterministic) ──
+  const SCN_LABELS={velocity:'ORC attack',phantom:'phantom inventory',shrinkage:'insider shrinkage'};
+  async function fireScenario(type,btn){
+    if(btn) btn.disabled=true;
+    try{
+      const {status,data}=await apiPost('/demo/scenario',{type,organizationId:opsOrg});
+      if(status===200){
+        if(riskView==='resolved') setRiskView('active'); // make the new incident visible
+        if(data.deduped) toast(`Simulated ${SCN_LABELS[type]} — deduped (a recent alert is still open)`);
+        else toast(`⚠ ${SCN_LABELS[type]} detected${data.itemName?` on ${data.itemName}`:''}`);
+        loadAlerts();
+        setTimeout(()=>{ if(document.getElementById('view-ops').classList.contains('active')) loadOps(opsOrg); },700);
+      } else toast(`Scenario failed: ${data.error||status}`);
+    }catch{ toast('Scenario failed'); }
+    finally{ if(btn) btn.disabled=false; }
+  }
+
+  // ── Real-time stream (SSE): alerts/sales/stock pushed live, no polling ──
+  let _es=null, _opsRefreshTimer=null;
+  function setStreamLive(on){ const el=document.getElementById('risk-live'); if(!el) return; el.textContent=on?'● live':'● reconnecting…'; el.style.color=on?'':'#999'; }
+  function connectStream(){
+    try{ if(_es) _es.close(); _es=new EventSource('/stream'); }catch{ return; }
+    _es.addEventListener('ready',()=>setStreamLive(true));
+    _es.onopen=()=>setStreamLive(true);
+    _es.onerror=()=>setStreamLive(false); // EventSource auto-reconnects
+    _es.onmessage=(e)=>{ let m; try{ m=JSON.parse(e.data); }catch{ return; } onStreamEvent(m); };
+  }
+  function onStreamEvent(m){
+    if(!document.getElementById('view-ops').classList.contains('active')) return;
+    if(m.type==='alert'||m.type==='alert-update'||m.type==='alert-resolved') loadAlerts();
+    if(m.type==='alert'||m.type==='stock'||m.type==='sale'){
+      clearTimeout(_opsRefreshTimer);
+      _opsRefreshTimer=setTimeout(()=>{ if(document.getElementById('view-ops').classList.contains('active')) loadOps(opsOrg); },700);
+    }
+  }
+
+  // ── Case file: incident timeline + ledger evidence, exportable ──
+  let _caseData=null;
+  const CASE_RULE={SALE_VELOCITY:'Sale-velocity spike',OVERSELL_ATTEMPT:'Oversell / phantom inventory',LARGE_SHRINKAGE:'Large manual shrinkage'};
+  function fmtTs(t){ return t?new Date(t).toLocaleString('en-US',{hour12:true}):'—'; }
+  async function openCase(id){
+    let d; try{ d=await apiGet(`/alerts/${id}/timeline`); }catch{ toast('Could not load case'); return; }
+    _caseData=d; const a=d.alert;
+    const sevStyle={HIGH:'background:#f8d7da;color:#721c24',MEDIUM:'background:#fff3cd;color:#856404',LOW:'background:#e2e3e5;color:#383d41'};
+    const tl=(d.timeline||[]).map(t=>`<li><span class="case-tl-event">${t.event}</span><span class="case-tl-ts">${fmtTs(t.ts)}</span><div>${esc(t.detail)}</div></li>`).join('');
+    const led=(d.ledger||[]).map(r=>`<tr><td>${fmtTs(r.createdAt)}</td><td>${r.reason}</td><td class="${r.delta<0?'delta-neg':'delta-pos'}">${r.delta>0?'+':''}${r.delta}</td><td>${r.balance}</td></tr>`).join('')
+      || `<tr><td colspan="4" style="color:var(--muted)">No ledger movements in the window.</td></tr>`;
+    document.getElementById('case-body').innerHTML=`
+      <div class="case-head">
+        <div><h2 style="margin:0">Case #${a.id} — ${CASE_RULE[a.rule]||a.rule}</h2>
+          <div class="case-meta">${esc(a.itemName||('Item '+(a.itemId||'—')))}${a.organizationName?` · ${esc(a.organizationName)}`:''} · status <b>${a.status}</b></div></div>
+        <span class="case-sev" style="${sevStyle[a.severity]||sevStyle.LOW}">${a.severity} · score ${a.score}</span>
+      </div>
+      <div>${esc(a.detail)}</div>
+      <div class="case-section-title">Case timeline</div>
+      <ul class="case-timeline">${tl}</ul>
+      <div class="case-section-title">Ledger evidence (audit trail)</div>
+      <table class="case-ledger"><thead><tr><th>Time</th><th>Reason</th><th>Δ</th><th>Balance</th></tr></thead><tbody>${led}</tbody></table>
+      <div class="case-actions">
+        <button class="cancel-btn" onclick="closeCase()">Close</button>
+        <button class="ra-btn" onclick="exportCaseCSV()">⬇ CSV</button>
+        <button class="confirm-btn" onclick="printCase()">🖨 Print / Save PDF</button>
+      </div>`;
+    document.getElementById('case-modal').classList.add('open');
+  }
+  function closeCase(){ document.getElementById('case-modal').classList.remove('open'); }
+  function exportCaseCSV(){
+    if(!_caseData) return; const a=_caseData.alert;
+    const rows=[['Case ID',a.id],['Rule',a.rule],['Severity',a.severity],['Score',a.score],['Status',a.status],
+      ['Item',a.itemName||a.itemId||''],['Organization',a.organizationName||a.organizationId||''],
+      ['Raised',a.createdAt],['Resolved',a.resolvedAt||''],['Resolution',a.resolution||''],['Detail',a.detail],
+      [],['Timeline'],['Time','Event','Detail']];
+    (_caseData.timeline||[]).forEach(t=>rows.push([t.ts,t.event,t.detail]));
+    rows.push([],['Ledger evidence'],['Time','Reason','Delta','Balance']);
+    (_caseData.ledger||[]).forEach(r=>rows.push([r.createdAt,r.reason,r.delta,r.balance]));
+    const csv=rows.map(r=>r.map(c=>`"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    const el=document.createElement('a'); el.href=url; el.download=`case-${a.id}.csv`; el.click(); URL.revokeObjectURL(url);
+  }
+  function printCase(){
+    if(!_caseData) return; const a=_caseData.alert;
+    const tl=(_caseData.timeline||[]).map(t=>`<li><b>${t.event}</b> <span style="color:#666">${fmtTs(t.ts)}</span><br>${esc(t.detail)}</li>`).join('');
+    const led=(_caseData.ledger||[]).map(r=>`<tr><td>${fmtTs(r.createdAt)}</td><td>${r.reason}</td><td style="text-align:right">${r.delta>0?'+':''}${r.delta}</td><td style="text-align:right">${r.balance}</td></tr>`).join('');
+    const w=window.open('','_blank','width=800,height=900'); if(!w){ toast('Allow popups to export the PDF'); return; }
+    w.document.write(`<!doctype html><html><head><title>Case #${a.id} — InventorySoft Risk</title>
+      <style>body{font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:720px;margin:32px auto;color:#1a1a1a;padding:0 20px;line-height:1.5}h1{font-size:1.3rem;margin-bottom:.2rem}.meta{color:#666;margin-bottom:1rem}.sev{display:inline-block;padding:.15rem .5rem;border-radius:6px;font-weight:700;font-size:.8rem;background:#f1f1f1}h2{font-size:.95rem;text-transform:uppercase;letter-spacing:.04em;color:#666;margin-top:1.5rem;border-bottom:1px solid #eee;padding-bottom:.2rem}ul{padding-left:1rem}li{margin:.4rem 0}table{width:100%;border-collapse:collapse;font-size:.85rem}th,td{border-bottom:1px solid #eee;padding:.35rem .5rem;text-align:left}.foot{margin-top:2rem;color:#999;font-size:.75rem}</style></head>
+      <body>
+      <h1>Risk Case #${a.id} — ${CASE_RULE[a.rule]||a.rule}</h1>
+      <div class="meta">${esc(a.itemName||('Item '+(a.itemId||'—')))}${a.organizationName?` · ${esc(a.organizationName)}`:''} · Status: <b>${a.status}</b> · <span class="sev">${a.severity} · score ${a.score}</span></div>
+      <p>${esc(a.detail)}</p>
+      <h2>Case timeline</h2><ul>${tl}</ul>
+      <h2>Ledger evidence (audit trail)</h2>
+      <table><thead><tr><th>Time</th><th>Reason</th><th style="text-align:right">Δ</th><th style="text-align:right">Balance</th></tr></thead><tbody>${led||'<tr><td colspan=4>No movements</td></tr>'}</tbody></table>
+      <div class="foot">Generated ${new Date().toLocaleString('en-US',{hour12:true})} · ABC Supermarkets × InventorySoft — demo</div>
+      </body></html>`);
+    w.document.close(); setTimeout(()=>{ w.focus(); w.print(); },300);
+  }
+
   loadOrg('351',document.querySelector('#org-tabs .org-tab'));
-  // Live risk feed: refresh alerts while the Operations view is open.
-  setInterval(()=>{ if(document.getElementById('view-ops').classList.contains('active')) loadAlerts(); },4000);
+  connectStream();
+  // Fallback poll (SSE handles real-time; this just self-heals if the stream drops).
+  setInterval(()=>{ if(document.getElementById('view-ops').classList.contains('active') && (!_es || _es.readyState!==1)) loadAlerts(); },12000);
 </script>
 </body>
 </html>

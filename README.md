@@ -127,6 +127,9 @@ Three containers, one `docker compose up`:
 | **Conversational analytics** *(extension)* | An "Ask the Data" panel answers plain-English questions about stock, sales, value, and risk via `POST /chat`. It's a **grounded, read-only tool-calling agent**: a deterministic planner calls an allow-list of read endpoints and every answer cites the endpoints it used. Questions can name a **department** ("…in the bakery / deli / general goods") to scope the answer to that org. Works fully offline; if `OPENAI_API_KEY` is set it uses an LLM to phrase the answer, grounded strictly on the fetched data (never free-form SQL) |
 | **Chat-driven remediation** *(extension)* | Ask the chat to *restock* an item (e.g. to clear an oversell alert) and it follows a **human-in-the-loop** flow: the agent only **proposes** a bounded action; you click **Confirm**, which calls `POST /chat/action` (INCREASE-only, validated, reusing `POST /admin`). The agent never writes on its own — detection → one-click remediation, all on the audited ledger |
 | **Auto-resolve + incident record** *(extension)* | Restocking closes the loop with two paths: a **plain restock** (chat, card) auto-resolves the related `OVERSELL_ATTEMPT` incidents for that item/org, while restocking **from a specific incident card** resolves *that* incident regardless of rule (explicit human remediation — e.g. closing out a flagged shrinkage). The incident **row is never deleted** — its `id` is preserved and stamped with a `resolution` audit note + `resolved_at`, so you keep a permanent record of what fired and how it was closed |
+| **Real-time stream (SSE)** *(extension)* | The Ops dashboard subscribes to `GET /stream` (Server-Sent Events) so sales, stock changes, and risk alerts appear **live** the instant they happen — no polling. The risk-feed "● live" indicator reflects the connection; an in-process event bus fans out from the worker, risk engine, and admin routes |
+| **One-click demo scenarios** *(extension)* | `POST /demo/scenario` deterministically fires each loss-prevention storyline — **ORC attack** (sale-velocity), **phantom inventory** (oversell), **insider shrinkage** — so the live demo never depends on hand-timed bursts. They write through the same tables and call the same risk evaluators as organic traffic |
+| **Case file + export** *(extension)* | Every alert opens a **case file** (`GET /alerts/{id}/timeline`): the incident timeline (raised → acknowledged → resolved) plus the **inventory-ledger evidence** behind the score. Exportable as **CSV** or **print/Save-PDF** — the investigate-document-export pattern of compliance tooling |
 | **Extensibility to AWS** | See mapping below — every local component has a 1:1 managed-service target |
 
 ---
@@ -147,6 +150,7 @@ is direct:
 | Product images / day-end archives | **S3** | Ledger + nightly snapshots archived to S3/Glacier |
 | Inventory time series | **CloudWatch / Timestream / QuickSight** | Dashboards over the same ledger data |
 | Risk-monitoring engine | **Lambda (stream consumer) + EventBridge / SNS** | Scores the sale-event stream and emits alerts; `risk_alerts` lives in RDS |
+| Real-time stream (SSE) | **API Gateway WebSocket / AppSync subscriptions, fed by EventBridge** | Push sales/stock/alerts to dashboards; the in-process bus becomes a managed fan-out |
 | "Ask the Data" chat agent | **Amazon Bedrock (Claude) + Lambda tools + API Gateway** | Read-only tool-calling over the same RDS/ledger; conversation + tool logs to CloudWatch/S3 for audit |
 | Secrets (`PG*`, `OPENAI_API_KEY`) | **Secrets Manager / SSM Parameter Store** | No plaintext creds in env in prod |
 
@@ -164,8 +168,11 @@ Base URL: **`http://localhost:3001`**
 | POST | `/item/{itemId}` | **async** | Register a sale → 202 `{eventId}` |
 | GET | `/events/{eventId}` | sync | Poll async sale status |
 | GET | `/analytics/organization/{id}/timeseries` | sync | Inventory over the working day (each point includes a `soldByItem` per-item breakdown) |
-| GET | `/alerts` | sync | Risk / loss-prevention alerts + severity summary |
+| GET | `/alerts` | sync | Risk / loss-prevention alerts + severity summary (`view=active\|resolved\|all`) |
 | POST | `/alerts/{id}` | sync | Update an alert's status (acknowledge / resolve) |
+| GET | `/alerts/{id}/timeline` | sync | Case file: incident timeline + ledger evidence |
+| POST | `/demo/scenario` | sync | Deterministically trigger a risk scenario (demo helper) |
+| GET | `/stream` | stream | Real-time event stream (Server-Sent Events) |
 | GET | `/health` | sync | DB-backed health probe |
 
 ### Live endpoint URLs (click to try the GETs)

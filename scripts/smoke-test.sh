@@ -53,6 +53,22 @@ check "timeseries has soldByItem" "yes" "$(curl -s "$API/analytics/organization/
 echo "• Risk monitoring"
 check "GET /alerts 200"           200 "$(code "$API/alerts?organizationId=351")"
 check "alerts has summary"        "yes" "$(curl -s "$API/alerts?organizationId=351" | grep -q '"summary"' && echo yes || echo no)"
+check "alerts view=active 200"    200 "$(code "$API/alerts?organizationId=351&view=active")"
+
+echo "• Demo scenarios (deterministic)"
+SCEN=$(curl -s -X POST "$API/demo/scenario" -H 'Content-Type: application/json' -d '{"type":"velocity","organizationId":"351"}')
+check "POST /demo/scenario 200"   "yes" "$(echo "$SCEN" | grep -q '"scenario":"velocity"' && echo yes || echo no)"
+SCEN_ID=$(echo "$SCEN" | sed -n 's/.*"alertId":"\([0-9]*\)".*/\1/p')
+check "scenario raised an alert"  "yes" "$([[ -n "$SCEN_ID" ]] && echo yes || echo no)"
+check "bad scenario type 400"     400 "$(code -X POST "$API/demo/scenario" -H 'Content-Type: application/json' -d '{"type":"nope","organizationId":"351"}')"
+
+echo "• Case file (timeline + evidence)"
+check "GET /alerts/:id/timeline"  200 "$(code "$API/alerts/${SCEN_ID:-1}/timeline")"
+check "timeline has ledger"       "yes" "$(curl -s "$API/alerts/${SCEN_ID:-1}/timeline" | grep -q '"timeline"' && echo yes || echo no)"
+
+echo "• Real-time stream (SSE)"
+check "GET /stream is event-stream" "yes" "$({ curl -s --max-time 2 -D - -o /dev/null "$API/stream" || true; } | grep -qi 'text/event-stream' && echo yes || echo no)"
+check "storefront /stream proxy"    "yes" "$({ curl -s --max-time 2 -D - -o /dev/null "$STORE/stream" || true; } | grep -qi 'text/event-stream' && echo yes || echo no)"
 
 echo "• Storefront proxy"
 check "GET / 200"                 200 "$(code "$STORE/")"

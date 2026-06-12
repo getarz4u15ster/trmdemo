@@ -7,6 +7,8 @@ const { v4: uuidv4 } = require("uuid");
 const { query, waitForDb, ensureSchema } = require("./db");
 const { startWorker } = require("./worker");
 const { evaluateAdjustment } = require("./risk");
+const { runScenario } = require("./scenario");
+const { bus, publish } = require("./bus");
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT || "25", 10);
@@ -28,7 +30,7 @@ app.use((req, res, next) => {
 let requestsThisSecond = 0;
 setInterval(() => { requestsThisSecond = 0; }, 1000);
 app.use((req, res, next) => {
-  if (req.path === "/health" || req.path.startsWith("/docs") || req.path === "/openapi.yaml") {
+  if (req.path === "/health" || req.path.startsWith("/docs") || req.path === "/openapi.yaml" || req.path === "/stream") {
     return next();
   }
   requestsThisSecond++;
@@ -193,6 +195,10 @@ app.post("/admin/:itemId", async (req, res) => {
       console.log(`[risk] restock resolved incident(s) ${resolvedAlerts.join(", ")} for item ${itemId}`);
     }
   }
+
+  // Real-time fan-out: stock changed, and any incidents this restock closed.
+  publish({ type: "stock", itemId, organizationId, newStock, operatorDirection });
+  if (resolvedAlerts.length) publish({ type: "alert-resolved", ids: resolvedAlerts, itemId, organizationId });
 
   res.json({
     itemId,
@@ -389,7 +395,88 @@ app.post("/alerts/:id", async (req, res) => {
       WHERE ra.id = $1`,
     [id]
   );
+  publish({ type: "alert-update", id: String(id), status });
   res.json(r.rows[0]);
+});
+
+// ─── POST /demo/scenario  (deterministic one-click loss-prevention storylines) ─
+app.post("/demo/scenario", async (req, res) => {
+  const { type, organizationId } = req.body || {};
+  try {
+    const out = await runScenario(type, organizationId);
+    res.json(out);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || "Scenario failed." });
+  }
+});
+
+// ─── GET /alerts/:id/timeline  (case detail: incident + ledger + event trail) ─
+app.get("/alerts/:id/timeline", async (req, res) => {
+  const { id } = req.params;
+  const a = await query(
+    `SELECT ra.id, ra.item_id AS "itemId", i.name AS "itemName",
+            ra.organization_id AS "organizationId", o.name AS "organizationName",
+            ra.event_id AS "eventId", ra.rule, ra.severity, ra.score, ra.detail,
+            ra.status, ra.resolution, ra.resolved_at AS "resolvedAt", ra.created_at AS "createdAt"
+       FROM risk_alerts ra
+       LEFT JOIN items i ON i.id = ra.item_id
+       LEFT JOIN organizations o ON o.id = ra.organization_id
+      WHERE ra.id = $1`,
+    [id]
+  );
+  if (a.rowCount === 0) return res.status(404).json({ error: "Alert not found." });
+  const alert = a.rows[0];
+
+  // Ledger movements for this item/org in a window around the incident — the
+  // evidence behind the score (the append-only ledger is the audit trail).
+  const ledger = alert.itemId
+    ? await query(
+        `SELECT id, delta, reason, balance, created_at AS "createdAt"
+           FROM inventory_ledger
+          WHERE item_id = $1 AND organization_id = $2
+            AND created_at BETWEEN $3::timestamptz - interval '5 minutes'
+                              AND COALESCE($4::timestamptz, now()) + interval '1 minute'
+          ORDER BY created_at DESC, id DESC
+          LIMIT 100`,
+        [alert.itemId, alert.organizationId, alert.createdAt, alert.resolvedAt]
+      )
+    : { rows: [] };
+
+  // Reconstructed case timeline from the fields we retain (raised → resolved).
+  const timeline = [
+    { ts: alert.createdAt, event: "RAISED", detail: `${alert.rule} (${alert.severity}, score ${alert.score}) — ${alert.detail}` },
+  ];
+  if (alert.status === "ACK") timeline.push({ ts: alert.createdAt, event: "ACKNOWLEDGED", detail: "Analyst acknowledged the incident." });
+  if (alert.status === "RESOLVED") {
+    timeline.push({ ts: alert.resolvedAt, event: "RESOLVED", detail: alert.resolution || "Resolved." });
+  }
+
+  res.json({ alert, timeline, ledger: ledger.rows });
+});
+
+// ─── GET /stream  (Server-Sent Events: live sales, stock, and alerts) ───────
+app.get("/stream", (req, res) => {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  res.write(`event: ready\ndata: {"ok":true}\n\n`);
+
+  const onEvent = (payload) => {
+    try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* client gone */ }
+  };
+  bus.on("event", onEvent);
+
+  // Heartbeat keeps proxies/load balancers from closing an idle connection.
+  const hb = setInterval(() => { try { res.write(": ping\n\n"); } catch {} }, 25000);
+
+  req.on("close", () => {
+    clearInterval(hb);
+    bus.off("event", onEvent);
+  });
 });
 
 app.use((_req, res) => res.status(404).json({ error: "Endpoint not found." }));

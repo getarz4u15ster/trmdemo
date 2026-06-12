@@ -9,6 +9,7 @@
 // fed by the same event queue, emitting alerts to SNS/EventBridge.
 
 const { query } = require("./db");
+const { publish } = require("./bus");
 
 // ─── Configurable thresholds (env-overridable) ──────────────────────────────
 const VELOCITY_WINDOW_SEC = parseInt(process.env.RISK_VELOCITY_WINDOW_SEC || "60", 10);
@@ -29,12 +30,15 @@ async function recentlyAlerted(rule, itemId, organizationId) {
 }
 
 async function recordAlert({ itemId, organizationId, eventId, rule, severity, score, detail }) {
-  await query(
+  const r = await query(
     `INSERT INTO risk_alerts (item_id, organization_id, event_id, rule, severity, score, detail)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [itemId || null, organizationId || null, eventId || null, rule, severity, score, detail]
   );
   console.log(`[risk] ${severity} ${rule} item=${itemId} org=${organizationId} score=${score}`);
+  // Real-time fan-out so dashboards light up the instant an alert fires.
+  publish({ type: "alert", id: String(r.rows[0].id), rule, severity, score, itemId, organizationId });
+  return String(r.rows[0].id);
 }
 
 // Rule 1: sale-velocity spike — an unusual burst of sales for one item/org.
@@ -47,39 +51,39 @@ async function evaluateSale({ itemId, organizationId, eventId }) {
       [itemId, organizationId, VELOCITY_WINDOW_SEC]
     );
     const n = r.rows[0].n;
-    if (n < VELOCITY_THRESHOLD) return;
-    if (await recentlyAlerted("SALE_VELOCITY", itemId, organizationId)) return;
+    if (n < VELOCITY_THRESHOLD) return null;
+    if (await recentlyAlerted("SALE_VELOCITY", itemId, organizationId)) return null;
     const severity = n >= VELOCITY_THRESHOLD * 2 ? "HIGH" : "MEDIUM";
     const score = Math.min(100, 50 + (n - VELOCITY_THRESHOLD));
-    await recordAlert({
+    return await recordAlert({
       itemId, organizationId, eventId, rule: "SALE_VELOCITY", severity, score,
       detail: `${n} sales of this item in the last ${VELOCITY_WINDOW_SEC}s (threshold ${VELOCITY_THRESHOLD}) — possible scan abuse or coordinated checkout.`,
     });
-  } catch (e) { console.error("[risk] evaluateSale", e.message); }
+  } catch (e) { console.error("[risk] evaluateSale", e.message); return null; }
 }
 
 // Rule 2: oversell / phantom-inventory attempt — a sale failed for lack of stock.
 async function evaluateFailedSale({ itemId, organizationId, eventId }) {
   try {
-    if (await recentlyAlerted("OVERSELL_ATTEMPT", itemId, organizationId)) return;
-    await recordAlert({
+    if (await recentlyAlerted("OVERSELL_ATTEMPT", itemId, organizationId)) return null;
+    return await recordAlert({
       itemId, organizationId, eventId, rule: "OVERSELL_ATTEMPT", severity: "MEDIUM", score: 60,
       detail: "Sale attempted on out-of-stock item — possible phantom inventory or theft (record exists but stock is gone).",
     });
-  } catch (e) { console.error("[risk] evaluateFailedSale", e.message); }
+  } catch (e) { console.error("[risk] evaluateFailedSale", e.message); return null; }
 }
 
 // Rule 3: large manual shrinkage — a big admin DECREASE worth reviewing.
 async function evaluateAdjustment({ itemId, organizationId, direction, magnitude }) {
   try {
-    if (direction !== "DECREASE" || magnitude < SHRINKAGE_MAGNITUDE) return;
+    if (direction !== "DECREASE" || magnitude < SHRINKAGE_MAGNITUDE) return null;
     const severity = magnitude >= SHRINKAGE_MAGNITUDE * 4 ? "HIGH" : "MEDIUM";
     const score = Math.min(100, 40 + magnitude);
-    await recordAlert({
+    return await recordAlert({
       itemId, organizationId, rule: "LARGE_SHRINKAGE", severity, score,
       detail: `Manual stock DECREASE of ${magnitude} units (threshold ${SHRINKAGE_MAGNITUDE}) — large shrinkage/adjustment flagged for review.`,
     });
-  } catch (e) { console.error("[risk] evaluateAdjustment", e.message); }
+  } catch (e) { console.error("[risk] evaluateAdjustment", e.message); return null; }
 }
 
 module.exports = { evaluateSale, evaluateFailedSale, evaluateAdjustment };

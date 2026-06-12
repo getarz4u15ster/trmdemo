@@ -1,4 +1,5 @@
 const path = require("path");
+const http = require("http");
 const express = require("express");
 const { RateLimiter } = require("./rateLimiter");
 const { chatAnswer, executeAction, llmStatus } = require("./chat");
@@ -44,6 +45,22 @@ app.all("/proxy/*", async (req, res) => {
 
 // Expose limiter stats so the UI can visualise queue depth during load.
 app.get("/limiter-stats", (_req, res) => res.json(limiter.stats()));
+
+// Real-time event stream. Bypasses the buffering /proxy handler and the rate
+// limiter — it's one long-lived connection that pipes the upstream SSE straight
+// through to the browser (sales, stock changes, and risk alerts in real time).
+app.get("/stream", (req, res) => {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  const upstream = http.get(`${INVENTORYSOFT_BASE}/stream`, (up) => up.pipe(res));
+  upstream.on("error", () => { try { res.write(`event: error\ndata: {}\n\n`); } catch {} });
+  req.on("close", () => upstream.destroy());
+});
 
 // ─── Conversational query over the ops data (read-only, grounded) ───────────
 app.post("/chat", async (req, res) => {
