@@ -4,8 +4,9 @@ const swaggerUi = require("swagger-ui-express");
 const YAML = require("yamljs");
 const { v4: uuidv4 } = require("uuid");
 
-const { query, waitForDb } = require("./db");
+const { query, waitForDb, ensureSchema } = require("./db");
 const { startWorker } = require("./worker");
+const { evaluateAdjustment } = require("./risk");
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const RATE_LIMIT = parseInt(process.env.RATE_LIMIT || "25", 10);
@@ -152,6 +153,9 @@ app.post("/admin/:itemId", async (req, res) => {
     [itemId, organizationId, delta, operatorDirection === "INCREASE" ? "RESTOCK" : "ADJUST", newStock]
   );
 
+  // Risk monitoring: flag large manual decreases (shrinkage) for review.
+  evaluateAdjustment({ itemId, organizationId, direction: operatorDirection, magnitude: operatorMagnitude });
+
   res.json({
     itemId,
     organizationId,
@@ -268,11 +272,59 @@ app.get("/analytics/organization/:organizationId/timeseries", async (req, res) =
   });
 });
 
+// ─── GET /alerts  (real-time risk / loss-prevention feed) ───────────────────
+app.get("/alerts", async (req, res) => {
+  const { organizationId, status, severity } = req.query;
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "50", 10)));
+  const where = [];
+  const params = [];
+  if (organizationId) { params.push(organizationId); where.push(`organization_id = $${params.length}`); }
+  if (status) { params.push(status); where.push(`status = $${params.length}`); }
+  if (severity) { params.push(severity); where.push(`severity = $${params.length}`); }
+  params.push(limit);
+  const rows = await query(
+    `SELECT id, item_id AS "itemId", organization_id AS "organizationId", event_id AS "eventId",
+            rule, severity, score, detail, status, created_at AS "createdAt"
+       FROM risk_alerts
+       ${where.length ? "WHERE " + where.join(" AND ") : ""}
+      ORDER BY created_at DESC
+      LIMIT $${params.length}`,
+    params
+  );
+  const counts = await query(
+    `SELECT severity, COUNT(*)::int AS n FROM risk_alerts
+      ${organizationId ? "WHERE organization_id = $1" : ""}
+      GROUP BY severity`,
+    organizationId ? [organizationId] : []
+  );
+  const summary = { HIGH: 0, MEDIUM: 0, LOW: 0 };
+  for (const c of counts.rows) summary[c.severity] = c.n;
+  res.json({ summary, alerts: rows.rows });
+});
+
+// ─── POST /alerts/:id  (case management: acknowledge / resolve) ─────────────
+app.post("/alerts/:id", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body || {};
+  if (!["OPEN", "ACK", "RESOLVED"].includes(status)) {
+    return res.status(400).json({ error: "status must be OPEN, ACK, or RESOLVED." });
+  }
+  const r = await query(
+    `UPDATE risk_alerts SET status = $1 WHERE id = $2
+     RETURNING id, item_id AS "itemId", organization_id AS "organizationId",
+               rule, severity, score, detail, status, created_at AS "createdAt"`,
+    [status, id]
+  );
+  if (r.rowCount === 0) return res.status(404).json({ error: "Alert not found." });
+  res.json(r.rows[0]);
+});
+
 app.use((_req, res) => res.status(404).json({ error: "Endpoint not found." }));
 
 // ─── Boot ───────────────────────────────────────────────────────────────────
 (async () => {
   await waitForDb();
+  await ensureSchema();
   startWorker();
   app.listen(PORT, () => {
     console.log(`\n✅  InventorySoft API running at http://localhost:${PORT}`);

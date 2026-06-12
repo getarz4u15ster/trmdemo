@@ -49,6 +49,10 @@ echo "• Analytics"
 check "GET timeseries 200"        200 "$(code "$API/analytics/organization/351/timeseries")"
 check "timeseries has soldByItem" "yes" "$(curl -s "$API/analytics/organization/351/timeseries" | grep -q soldByItem && echo yes || echo no)"
 
+echo "• Risk monitoring"
+check "GET /alerts 200"           200 "$(code "$API/alerts?organizationId=351")"
+check "alerts has summary"        "yes" "$(curl -s "$API/alerts?organizationId=351" | grep -q '"summary"' && echo yes || echo no)"
+
 echo "• Storefront proxy"
 check "GET / 200"                 200 "$(code "$STORE/")"
 check "GET /limiter-stats 200"    200 "$(code "$STORE/limiter-stats")"

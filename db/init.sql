@@ -59,6 +59,26 @@ CREATE INDEX IF NOT EXISTS idx_ledger_org_time
 CREATE INDEX IF NOT EXISTS idx_sale_events_status
   ON sale_events (status, created_at);
 
+-- Real-time risk / loss-prevention alerts. A monitoring layer scores each stock
+-- movement against configurable rules (à la transaction monitoring) and records
+-- anything anomalous here for triage — the immutable inventory_ledger is the
+-- backing audit trail.
+CREATE TABLE IF NOT EXISTS risk_alerts (
+  id              BIGSERIAL PRIMARY KEY,
+  item_id         TEXT,
+  organization_id TEXT,
+  event_id        UUID,                       -- linked sale event, if any
+  rule            TEXT NOT NULL,              -- which rule fired
+  severity        TEXT NOT NULL,              -- LOW | MEDIUM | HIGH
+  score           INTEGER NOT NULL DEFAULT 0, -- 0-100 risk score
+  detail          TEXT NOT NULL,              -- human-readable explanation
+  status          TEXT NOT NULL DEFAULT 'OPEN', -- OPEN | ACK | RESOLVED
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_risk_alerts_org_time
+  ON risk_alerts (organization_id, created_at DESC);
+
 -- ─── Seed data (matches the provided assessment kit) ────────────────────────
 
 INSERT INTO organizations (id, name) VALUES

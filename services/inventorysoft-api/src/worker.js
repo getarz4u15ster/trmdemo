@@ -1,4 +1,5 @@
 const { pool } = require("./db");
+const { evaluateSale, evaluateFailedSale } = require("./risk");
 
 // Background worker that drains the async sale queue.
 //
@@ -49,6 +50,8 @@ async function processOnce() {
       );
       await client.query("COMMIT");
       console.log(`[worker] event ${event_id} FAILED (insufficient stock)`);
+      // Risk monitoring runs after commit so it never blocks sale processing.
+      evaluateFailedSale({ itemId: item_id, organizationId: organization_id, eventId: event_id });
       return true;
     }
 
@@ -69,6 +72,8 @@ async function processOnce() {
 
     await client.query("COMMIT");
     console.log(`[worker] event ${event_id} COMPLETED (item ${item_id} → ${newStock})`);
+    // Risk monitoring runs after commit so it never blocks sale processing.
+    evaluateSale({ itemId: item_id, organizationId: organization_id, eventId: event_id });
     return true;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});

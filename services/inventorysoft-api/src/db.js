@@ -27,4 +27,26 @@ async function waitForDb(retries = 30, delayMs = 1000) {
   throw new Error("Could not connect to Postgres after retries");
 }
 
-module.exports = { pool, query: (text, params) => pool.query(text, params), waitForDb };
+// Idempotent migration so the risk-monitoring table exists even on an already
+// initialized volume (init.sql only runs on a fresh database).
+async function ensureSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS risk_alerts (
+      id              BIGSERIAL PRIMARY KEY,
+      item_id         TEXT,
+      organization_id TEXT,
+      event_id        UUID,
+      rule            TEXT NOT NULL,
+      severity        TEXT NOT NULL,
+      score           INTEGER NOT NULL DEFAULT 0,
+      detail          TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'OPEN',
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_risk_alerts_org_time
+      ON risk_alerts (organization_id, created_at DESC);
+  `);
+  console.log("[db] schema ensured (risk_alerts)");
+}
+
+module.exports = { pool, query: (text, params) => pool.query(text, params), waitForDb, ensureSchema };

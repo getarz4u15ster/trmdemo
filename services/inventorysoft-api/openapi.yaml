@@ -22,6 +22,8 @@ tags:
     description: Register point-of-sale events (asynchronous)
   - name: Analytics
     description: Inventory movement over the working day
+  - name: Risk
+    description: Real-time risk / loss-prevention monitoring
   - name: System
     description: Health & operational endpoints
 
@@ -154,6 +156,68 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TimeSeries" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /alerts:
+    get:
+      tags: [Risk]
+      summary: Real-time risk / loss-prevention alerts
+      description: >
+        Returns risk alerts raised by the monitoring engine, which scores every
+        stock movement against loss-prevention rules (sale-velocity spikes,
+        oversell/phantom-inventory attempts, and large manual shrinkage). Newest
+        first, with a severity summary count.
+      parameters:
+        - name: organizationId
+          in: query
+          required: false
+          schema: { type: string }
+          example: "351"
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [OPEN, ACK, RESOLVED] }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Risk alerts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertsResponse" }
+
+  /alerts/{id}:
+    post:
+      tags: [Risk]
+      summary: Update an alert's status (case management)
+      description: Acknowledge or resolve a risk alert as part of the triage workflow.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [OPEN, ACK, RESOLVED] }
+      responses:
+        "200":
+          description: Updated alert
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Alert" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /health:
@@ -294,3 +358,28 @@ components:
                   properties:
                     name: { type: string, example: "Sparkling Water (12-pack)" }
                     units: { type: integer, example: 8 }
+    Alert:
+      type: object
+      properties:
+        id: { type: string }
+        itemId: { type: string, nullable: true }
+        organizationId: { type: string, nullable: true }
+        eventId: { type: string, format: uuid, nullable: true }
+        rule: { type: string, enum: [SALE_VELOCITY, OVERSELL_ATTEMPT, LARGE_SHRINKAGE] }
+        severity: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        score: { type: integer, example: 100 }
+        detail: { type: string }
+        status: { type: string, enum: [OPEN, ACK, RESOLVED] }
+        createdAt: { type: string, format: date-time }
+    AlertsResponse:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            HIGH: { type: integer, example: 1 }
+            MEDIUM: { type: integer, example: 2 }
+            LOW: { type: integer, example: 0 }
+        alerts:
+          type: array
+          items: { $ref: "#/components/schemas/Alert" }

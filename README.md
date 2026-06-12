@@ -3,8 +3,9 @@
 A production-shaped, fully **Dockerized** mock integration for the TRM Solutions
 Architect assessment. It takes the provided zero-dependency kit and enriches it
 into a three-tier stack with a **persistent database**, a **Swagger-documented
-API**, **async sale processing**, **rate-limit handling**, **idempotency**, and
-an **operations dashboard** that tracks inventory over the working day.
+API**, **async sale processing**, **rate-limit handling**, **idempotency**,
+**real-time risk / loss-prevention monitoring**, and an **operations dashboard**
+that tracks inventory over the working day.
 
 > The original assessment kit is preserved untouched in [`inventorysoft-mock/`](./inventorysoft-mock)
 > for reference. Everything below is the enriched solution.
@@ -87,6 +88,8 @@ Three containers, one `docker compose up`:
    stand-in for the customer's **AWS RDS**).
 2. **api** — the InventorySoft API. Express + `pg`, Swagger UI, a global
    25 req/s limiter, and a background worker that drains the async sale queue.
+   It also runs a **risk-monitoring engine** that scores every stock movement
+   against loss-prevention rules and records anomalies as `risk_alerts`.
 3. **storefront** — the ABC Supermarkets app. Serves the UI and proxies every
    upstream call through a **token-bucket rate limiter** so checkout bursts get
    smoothed instead of tripping 429s.
@@ -105,6 +108,7 @@ Three containers, one `docker compose up`:
 | **Inventory freshness / lag** | UI re-fetches org inventory after checkout and polls `GET /events/:id` to show eventual consistency |
 | **Track inventory over the working day** | Append-only `inventory_ledger` + `GET /analytics/.../timeseries` powering a stock-vs-sold chart with 12-hour time axis and a hover tooltip showing the per-item (`soldByItem`) breakdown for each interval |
 | **Error handling (409)** | `POST /admin` returns 409 on negative stock; UI surfaces it inline |
+| **Real-time risk / loss prevention** *(extension)* | A monitoring engine scores every stock movement against rules — sale-velocity spikes, oversell/phantom inventory, large shrinkage — raising scored `risk_alerts` with a triage workflow (acknowledge / resolve) shown live on the Ops dashboard. Mirrors a transaction-monitoring system applied to retail loss prevention |
 | **Extensibility to AWS** | See mapping below — every local component has a 1:1 managed-service target |
 
 ---
@@ -124,6 +128,7 @@ is direct:
 | API rate limiter (429) | **API Gateway usage plans / WAF rate rules** | Enforce the 25 req/s contract at the edge |
 | Product images / day-end archives | **S3** | Ledger + nightly snapshots archived to S3/Glacier |
 | Inventory time series | **CloudWatch / Timestream / QuickSight** | Dashboards over the same ledger data |
+| Risk-monitoring engine | **Lambda (stream consumer) + EventBridge / SNS** | Scores the sale-event stream and emits alerts; `risk_alerts` lives in RDS |
 | Secrets (`PG*`) | **Secrets Manager / SSM Parameter Store** | No plaintext creds in env in prod |
 
 ---
@@ -140,6 +145,8 @@ Base URL: **`http://localhost:3001`**
 | POST | `/item/{itemId}` | **async** | Register a sale → 202 `{eventId}` |
 | GET | `/events/{eventId}` | sync | Poll async sale status |
 | GET | `/analytics/organization/{id}/timeseries` | sync | Inventory over the working day (each point includes a `soldByItem` per-item breakdown) |
+| GET | `/alerts` | sync | Risk / loss-prevention alerts + severity summary |
+| POST | `/alerts/{id}` | sync | Update an alert's status (acknowledge / resolve) |
 | GET | `/health` | sync | DB-backed health probe |
 
 ### Live endpoint URLs (click to try the GETs)
@@ -152,6 +159,7 @@ Base URL: **`http://localhost:3001`**
 - Organization (Bakery): http://localhost:3001/organization/352
 - Organization (Deli): http://localhost:3001/organization/353
 - Analytics time series: http://localhost:3001/analytics/organization/351/timeseries
+- Risk alerts: http://localhost:3001/alerts?organizationId=351
 - Event status: `http://localhost:3001/events/{eventId}` (use an `eventId` from a sale)
 - Storefront app: http://localhost:3000
 - Storefront limiter stats: http://localhost:3000/limiter-stats
