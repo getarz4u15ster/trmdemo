@@ -75,6 +75,12 @@ check "GET / 200"                 200 "$(code "$STORE/")"
 check "GET /limiter-stats 200"    200 "$(code "$STORE/limiter-stats")"
 check "proxy GET org 200"         200 "$(code "$STORE/proxy/organization/351")"
 
+echo "• Load / rate-limit simulation"
+LT=$(curl -s -X POST "$STORE/load-test" -H 'Content-Type: application/json' -d '{"count":40,"itemId":"92746661","organizationId":"351","bypass":false}')
+check "POST /load-test queued"    "yes" "$(echo "$LT" | grep -q '"accepted"' && echo yes || echo no)"
+check "queued → no 429s"          "yes" "$(echo "$LT" | grep -q '"rateLimited":0' && echo yes || echo no)"
+check "load-test bad body 400"    400 "$(code -X POST "$STORE/load-test" -H 'Content-Type: application/json' -d '{"count":10}')"
+
 echo "• Ask-the-data chat (grounded, read-only)"
 check "GET /chat-info 200"        200 "$(code "$STORE/chat-info")"
 check "POST /chat 200"            200 "$(code -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"question":"what is low on stock?","organizationId":"351"}')"

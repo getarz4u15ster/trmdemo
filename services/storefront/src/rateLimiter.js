@@ -44,6 +44,11 @@ class RateLimiter {
     }
   }
 
+  // Reset the high-water mark so each load-test run reports its own peak.
+  resetPeak() {
+    this.maxQueueDepth = this.queue.length;
+  }
+
   stats() {
     return {
       ratePerSec: this.ratePerSec,

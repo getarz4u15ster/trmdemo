@@ -118,7 +118,7 @@ Three containers, one `docker compose up`:
 | **Local database** to persist inventory | Postgres with `items`, `inventory`, `sale_events`, `inventory_ledger`; survives restarts via a named volume |
 | **Swagger API** | Full OpenAPI 3 spec served at `/docs` with try-it-out |
 | **Async vs sync** | `POST /item/:id` enqueues a `PENDING` event (HTTP 202) drained by a worker; admin + GETs are synchronous |
-| **Rate-limit strategy (25 req/s)** | Client-side token-bucket **queue** in the storefront; API still enforces 429. The Ops dashboard has a load simulator to demonstrate it live |
+| **Rate-limit strategy (25 req/s)** | Client-side token-bucket **queue** in the storefront (rate + burst kept under the cap); API still enforces 429. The Ops dashboard has a server-side load simulator (`POST /load-test`) with a **Bypass queue** toggle so you can show the before/after live: queue on → 100 accepted, 0 × 429 (queue depth spikes ~95 and drains); bypass → ~25 accepted, ~75 × 429 |
 | **Idempotency** | `Idempotency-Key` header dedupes retried sales so a timeout-retry never double-counts |
 | **Inventory freshness / lag** | UI re-fetches org inventory after checkout and polls `GET /events/:id` to show eventual consistency |
 | **Track inventory over the working day** | Append-only `inventory_ledger` + `GET /analytics/.../timeseries` powering a stock-vs-sold chart with 12-hour time axis and a hover tooltip showing the per-item (`soldByItem`) breakdown for each interval |

@@ -167,6 +167,8 @@
     .ls-badge { font-size:.68rem;font-weight:800;padding:.15rem .5rem;border-radius:6px; }
     .ls-out { background:#f8d7da;color:#721c24; }
     .ls-low { background:#fff3cd;color:#856404; }
+    .lt-bypass-label { display:inline-flex;align-items:center;gap:.35rem;font-size:.82rem;font-weight:600;color:#856404;cursor:pointer;user-select:none;white-space:nowrap; }
+    .lt-bypass-label input { cursor:pointer; }
     .scenario-row { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem; }
     .scenario-label { font-size:.78rem;color:var(--muted);font-weight:600; }
     .scn-btn { font-size:.78rem;padding:.4rem .8rem;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-weight:600;transition:filter .12s,transform .06s,box-shadow .12s; }
@@ -359,12 +361,15 @@
 
     <div class="panel">
       <h3>Rate-Limit & Load Simulation</h3>
-      <p class="sub">The InventorySoft API caps at <strong>25 req/s</strong>. The storefront funnels all calls through a
-        token-bucket queue (≈20 req/s) so bursts get smoothed instead of returning 429. Fire a burst of sales below and
-        watch the queue absorb it. <a class="docs-link" href="http://localhost:3001/docs" target="_blank">Open Swagger ↗</a></p>
+      <p class="sub">The InventorySoft API caps at <strong>25 req/s</strong> and returns <strong>429</strong> over that. The storefront
+        funnels all calls through a token-bucket queue (≈18 req/s) so bursts get <strong>smoothed</strong> instead of dropped. Fire a
+        burst below: with the queue on, every sale is accepted (watch the queue depth absorb the spike); tick
+        <strong>Bypass queue</strong> to hit the API directly and watch the 429s pile up.
+        <a class="docs-link" href="http://localhost:3001/docs" target="_blank">Open Swagger ↗</a></p>
       <div class="loadtest-controls">
         <div class="field"><label>Sale events to fire</label><input id="lt-count" type="number" value="100" min="1" max="1000"></div>
         <div class="field"><label>Target item</label><select id="lt-item"></select></div>
+        <label class="lt-bypass-label" title="Skip the storefront queue and fire straight at the API to see real 429s"><input type="checkbox" id="lt-bypass"> ⚡ Bypass queue (fire direct)</label>
         <button class="run-btn" id="lt-run" onclick="runLoadTest()">▶ Fire burst</button>
       </div>
       <div class="meter" style="margin-bottom:.75rem"><div id="lt-meter" style="width:0%"></div></div>
@@ -852,28 +857,37 @@
   }
 
   // ── Load / rate-limit simulation ──
+  // The burst is fired server-side (POST /load-test) so all N requests hit the
+  // limiter at once and the queue depth is real — the browser's ~6-connection cap
+  // would otherwise hide it. We poll /limiter-stats to animate it live.
   let peakQueue=0;
+  let _loadTestRunning=false;
   async function runLoadTest(){
     const count=Math.min(1000,Math.max(1,parseInt(document.getElementById('lt-count').value,10)||100));
     const itemId=document.getElementById('lt-item').value;
+    const bypass=document.getElementById('lt-bypass').checked;
     const btn=document.getElementById('lt-run'); btn.disabled=true; btn.textContent='Firing…';
-    let sent=0,ok=0,limited=0; peakQueue=0;
     const set=(id,v)=>document.getElementById(id).textContent=v;
-    set('lt-sent',0); set('lt-ok',0); set('lt-429',0); set('lt-peak',0);
+    peakQueue=0; _loadTestRunning=true;
+    set('lt-sent',count); set('lt-ok',0); set('lt-429',0); set('lt-queue',0); set('lt-peak',0);
+    document.getElementById('lt-meter').style.width='0%';
     const poll=setInterval(async()=>{ try{ const s=await (await fetch('/limiter-stats')).json();
-      set('lt-queue',s.queueDepth); peakQueue=Math.max(peakQueue,s.maxQueueDepth); set('lt-peak',peakQueue); }catch{} },200);
-    const promises=[];
-    for(let i=0;i<count;i++){
-      promises.push(fetch(`/proxy/item/${itemId}`,{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':uuid()},body:JSON.stringify({itemId,organizationId:opsOrg})})
-        .then(r=>{ sent++; if(r.status===202)ok++; else if(r.status===429)limited++; set('lt-sent',sent); set('lt-ok',ok); set('lt-429',limited);
-          document.getElementById('lt-meter').style.width=(sent/count*100)+'%'; }).catch(()=>{sent++;set('lt-sent',sent);}));
-    }
-    await Promise.all(promises);
+      set('lt-queue',s.queueDepth); peakQueue=Math.max(peakQueue,s.maxQueueDepth); set('lt-peak',peakQueue);
+      const drained=Math.max(0,count-s.queueDepth); document.getElementById('lt-meter').style.width=Math.min(100,drained/count*100)+'%';
+    }catch{} },150);
+    let data={};
+    try{
+      const r=await fetch('/load-test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count,itemId,organizationId:opsOrg,bypass})});
+      logAPI('POST',`/load-test${bypass?' (bypass)':''}`,r.status); data=await r.json();
+    }catch{ data={accepted:0,rateLimited:0}; }
     clearInterval(poll);
-    const s=await (await fetch('/limiter-stats')).json(); set('lt-queue',s.queueDepth); set('lt-peak',Math.max(peakQueue,s.maxQueueDepth));
+    set('lt-ok',data.accepted||0); set('lt-429',data.rateLimited||0);
+    set('lt-queue',0); set('lt-peak',data.peakQueueDepth!=null?data.peakQueueDepth:peakQueue);
+    document.getElementById('lt-meter').style.width='100%';
     btn.disabled=false; btn.textContent='▶ Fire burst';
-    toast(`Burst done: ${ok} accepted, ${limited} rate-limited`);
-    setTimeout(()=>loadOps(opsOrg),1500);
+    toast(`Burst done${bypass?' (queue bypassed)':''}: ${data.accepted||0} accepted, ${data.rateLimited||0} rate-limited`);
+    _loadTestRunning=false;
+    setTimeout(()=>{ if(document.getElementById('view-ops').classList.contains('active')) loadOps(opsOrg); },800);
   }
 
   let toastTimer;
@@ -909,6 +923,7 @@
   function onStreamEvent(m){
     if(!document.getElementById('view-ops').classList.contains('active')) return;
     if(m.type==='alert'||m.type==='alert-update'||m.type==='alert-resolved') loadAlerts();
+    if(_loadTestRunning) return; // skip heavy refresh during a burst — we reload once after
     if(m.type==='alert'||m.type==='stock'||m.type==='sale'){
       clearTimeout(_opsRefreshTimer);
       _opsRefreshTimer=setTimeout(()=>{ if(document.getElementById('view-ops').classList.contains('active')) loadOps(opsOrg); },700);
