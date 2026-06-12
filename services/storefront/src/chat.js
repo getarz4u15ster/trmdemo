@@ -383,7 +383,15 @@ async function executeAction(action) {
     e.status = status;
     throw e;
   }
-  return { ok: true, itemId, organizationId, magnitude, previousStock: data.previousStock, newStock: data.newStock };
+  return {
+    ok: true,
+    itemId,
+    organizationId,
+    magnitude,
+    previousStock: data.previousStock,
+    newStock: data.newStock,
+    resolvedAlerts: data.resolvedAlerts || [],
+  };
 }
 
 async function chatAnswer(question, organizationId) {

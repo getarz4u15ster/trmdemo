@@ -211,6 +211,7 @@ paths:
               required: [status]
               properties:
                 status: { type: string, enum: [OPEN, ACK, RESOLVED] }
+                resolution: { type: string, description: Optional audit note recorded when resolving }
       responses:
         "200":
           description: Updated alert
@@ -336,6 +337,10 @@ components:
         newStock: { type: integer }
         operatorDirection: { type: string }
         operatorMagnitude: { type: integer }
+        resolvedAlerts:
+          type: array
+          description: IDs of OVERSELL_ATTEMPT incidents auto-resolved by this restock (INCREASE only).
+          items: { type: string }
     TimeSeries:
       type: object
       properties:
@@ -372,6 +377,8 @@ components:
         score: { type: integer, example: 100 }
         detail: { type: string }
         status: { type: string, enum: [OPEN, ACK, RESOLVED] }
+        resolution: { type: string, nullable: true, description: How the incident was resolved (e.g. auto-resolved by restock) }
+        resolvedAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     AlertsResponse:
       type: object

@@ -28,6 +28,7 @@ check "GET /organization/999"    404 "$(code "$API/organization/999")"
 
 echo "• Admin (sync)"
 check "POST /admin INCREASE 200" 200 "$(code -X POST "$API/admin/92746661" -H 'Content-Type: application/json' -d '{"operatorDirection":"INCREASE","operatorMagnitude":10,"organizationId":"351"}')"
+check "restock returns resolvedAlerts" "yes" "$(curl -s -X POST "$API/admin/92746661" -H 'Content-Type: application/json' -d '{"operatorDirection":"INCREASE","operatorMagnitude":1,"organizationId":"351"}' | grep -q '"resolvedAlerts"' && echo yes || echo no)"
 check "POST /admin overdraw 409" 409 "$(code -X POST "$API/admin/92746661" -H 'Content-Type: application/json' -d '{"operatorDirection":"DECREASE","operatorMagnitude":999999,"organizationId":"351"}')"
 check "POST /admin bad body 400" 400 "$(code -X POST "$API/admin/92746661" -H 'Content-Type: application/json' -d '{"operatorDirection":"SIDEWAYS","operatorMagnitude":1,"organizationId":"351"}')"
 

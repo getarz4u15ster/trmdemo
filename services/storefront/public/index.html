@@ -168,6 +168,8 @@
     .risk-alert .ra-item { display:inline-block;font-size:.72rem;font-weight:600;color:var(--text);background:var(--warm);border:1px solid var(--border);padding:.08rem .4rem;border-radius:6px;margin-bottom:.25rem; }
     .risk-alert .ra-item-click { cursor:pointer;transition:all .12s; } .risk-alert .ra-item-click:hover { background:var(--gold);border-color:var(--gold); }
     .risk-alert .ra-detail { font-size:.78rem;color:var(--muted);line-height:1.4; }
+    .risk-alert .ra-id { font-size:.62rem;font-weight:700;color:var(--muted);font-family:ui-monospace,Menlo,monospace; }
+    .risk-alert .ra-resolution { margin-top:.3rem;font-size:.72rem;font-weight:600;color:var(--green2); }
     .risk-alert .ra-meta { font-size:.7rem;color:var(--muted);white-space:nowrap;text-align:right; }
     .risk-alert .ra-score { font-weight:700;color:var(--text);font-size:1.05rem;line-height:1;cursor:help; }
     .risk-alert .ra-score-lbl { display:block;font-size:.55rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:.1rem; }
@@ -536,11 +538,12 @@
     const organizationId=document.getElementById('rs-org').value;
     const res=document.getElementById('rs-result');
     const {status,data}=await apiPost(`/admin/${itemId}`,{operatorDirection,operatorMagnitude,organizationId});
-    if(status===200){ res.innerHTML=`<span style="color:var(--green2)">✓ ${data.previousStock} → ${data.newStock}</span>`;
-      toast('Stock updated ✓'); setTimeout(()=>{ closeRestock();
+    if(status===200){ const rz=(data.resolvedAlerts||[]);
+      res.innerHTML=`<span style="color:var(--green2)">✓ ${data.previousStock} → ${data.newStock}${rz.length?` · resolved incident${rz.length>1?'s':''} ${rz.map(i=>'#'+i).join(', ')}`:''}</span>`;
+      toast(rz.length?`Stock updated ✓ · auto-resolved ${rz.length} incident${rz.length>1?'s':''}`:'Stock updated ✓'); setTimeout(()=>{ closeRestock();
         if(document.getElementById('view-ops').classList.contains('active')){ loadOps(opsOrg); }
         else { loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); }
-      },800); }
+      },1100); }
     else res.innerHTML=`<span style="color:var(--red)">✗ ${status}: ${data.error||'error'}</span>`;
   }
 
@@ -599,11 +602,13 @@
       else if(st==='ACK') actions=`<button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
       if(restockCall) actions+=`<button class="ra-btn ra-btn-restock" onclick="${restockCall}">📦 Restock</button>`;
       const itemChip=itemName?`<span class="ra-item${a.itemId?' ra-item-click':''}" ${restockCall?`onclick="${restockCall}"`:''} title="${a.itemId?('Click to restock '+itemName):''}">📦 ${itemName}${a.organizationName?` · ${a.organizationName}`:''}</span>`:'';
+      const resLine=(st==='RESOLVED'&&a.resolution)?`<div class="ra-resolution">✓ ${a.resolution}</div>`:'';
       return `<div class="risk-alert sev-${sev} ${st==='RESOLVED'?'ra-resolved':''}">
         <span class="ra-sev">${a.severity}</span>
-        <div class="ra-body"><div class="ra-rule">${RULE_LABELS[a.rule]||a.rule} ${statusBadge}</div>
+        <div class="ra-body"><div class="ra-rule">${RULE_LABELS[a.rule]||a.rule} ${statusBadge} <span class="ra-id" title="Incident ID (kept on record)">#${a.id}</span></div>
           ${itemChip}
           <div class="ra-detail">${a.detail}</div>
+          ${resLine}
           ${actions?`<div class="ra-actions">${actions}</div>`:''}</div>
         <div class="ra-meta"><div class="ra-score" title="Risk score (0–100): how severe this alert is within its severity band. Higher = more urgent.">${a.score}<span class="ra-score-lbl">risk score</span></div><div>${when}</div></div>
       </div>`;
@@ -670,8 +675,9 @@
     try{
       const r=await fetch('/chat/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})});
       const d=await r.json(); if(!r.ok) throw new Error(d.error||'failed');
-      btn.textContent=`✓ ${a.itemName}: ${d.previousStock} → ${d.newStock}`; btn.classList.add('done');
-      toast('Restocked ✓'); loadAlerts();
+      const rz=(d.resolvedAlerts||[]);
+      btn.textContent=`✓ ${a.itemName}: ${d.previousStock} → ${d.newStock}${rz.length?` · resolved ${rz.map(i=>'#'+i).join(', ')}`:''}`; btn.classList.add('done');
+      toast(rz.length?`Restocked ✓ · auto-resolved ${rz.length} incident${rz.length>1?'s':''}`:'Restocked ✓'); loadAlerts();
       if(document.getElementById('view-ops').classList.contains('active')) loadOps(opsOrg);
     }catch(err){ btn.disabled=false; btn.textContent='Retry restock'; toast('Restock failed'); }
   }

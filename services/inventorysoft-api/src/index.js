@@ -156,6 +156,27 @@ app.post("/admin/:itemId", async (req, res) => {
   // Risk monitoring: flag large manual decreases (shrinkage) for review.
   evaluateAdjustment({ itemId, organizationId, direction: operatorDirection, magnitude: operatorMagnitude });
 
+  // Auto-resolve stock-out incidents that a restock actually remediates. Only
+  // OVERSELL_ATTEMPT (phantom-inventory / out-of-stock) alerts qualify — a
+  // velocity spike or shrinkage is a different root cause and stays open. The
+  // incident row is kept (id + history preserved) with a resolution audit note.
+  let resolvedAlerts = [];
+  if (operatorDirection === "INCREASE") {
+    const r = await query(
+      `UPDATE risk_alerts
+          SET status = 'RESOLVED', resolved_at = now(),
+              resolution = 'Auto-resolved by restock +' || $3 || ' on ' || to_char(now(), 'YYYY-MM-DD HH24:MI')
+        WHERE item_id = $1 AND organization_id = $2
+          AND status <> 'RESOLVED' AND rule = 'OVERSELL_ATTEMPT'
+        RETURNING id`,
+      [itemId, organizationId, operatorMagnitude]
+    );
+    resolvedAlerts = r.rows.map((x) => String(x.id));
+    if (resolvedAlerts.length) {
+      console.log(`[risk] restock auto-resolved incident(s) ${resolvedAlerts.join(", ")} for item ${itemId}`);
+    }
+  }
+
   res.json({
     itemId,
     organizationId,
@@ -163,6 +184,7 @@ app.post("/admin/:itemId", async (req, res) => {
     newStock,
     operatorDirection,
     operatorMagnitude,
+    resolvedAlerts,
   });
 });
 
@@ -286,7 +308,7 @@ app.get("/alerts", async (req, res) => {
     `SELECT ra.id, ra.item_id AS "itemId", i.name AS "itemName",
             ra.organization_id AS "organizationId", o.name AS "organizationName",
             ra.event_id AS "eventId", ra.rule, ra.severity, ra.score, ra.detail,
-            ra.status, ra.created_at AS "createdAt"
+            ra.status, ra.resolution, ra.resolved_at AS "resolvedAt", ra.created_at AS "createdAt"
        FROM risk_alerts ra
        LEFT JOIN items i ON i.id = ra.item_id
        LEFT JOIN organizations o ON o.id = ra.organization_id
@@ -309,17 +331,26 @@ app.get("/alerts", async (req, res) => {
 // ─── POST /alerts/:id  (case management: acknowledge / resolve) ─────────────
 app.post("/alerts/:id", async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body || {};
+  const { status, resolution } = req.body || {};
   if (!["OPEN", "ACK", "RESOLVED"].includes(status)) {
     return res.status(400).json({ error: "status must be OPEN, ACK, or RESOLVED." });
   }
-  const upd = await query(`UPDATE risk_alerts SET status = $1 WHERE id = $2 RETURNING id`, [status, id]);
+  const isResolved = status === "RESOLVED";
+  const note = isResolved ? (resolution || "Manually resolved") : null;
+  const upd = await query(
+    `UPDATE risk_alerts
+        SET status = $1,
+            resolved_at = CASE WHEN $1 = 'RESOLVED' THEN now() ELSE NULL END,
+            resolution = CASE WHEN $1 = 'RESOLVED' THEN $3 ELSE NULL END
+      WHERE id = $2 RETURNING id`,
+    [status, id, note]
+  );
   if (upd.rowCount === 0) return res.status(404).json({ error: "Alert not found." });
   const r = await query(
     `SELECT ra.id, ra.item_id AS "itemId", i.name AS "itemName",
             ra.organization_id AS "organizationId", o.name AS "organizationName",
             ra.event_id AS "eventId", ra.rule, ra.severity, ra.score, ra.detail,
-            ra.status, ra.created_at AS "createdAt"
+            ra.status, ra.resolution, ra.resolved_at AS "resolvedAt", ra.created_at AS "createdAt"
        FROM risk_alerts ra
        LEFT JOIN items i ON i.id = ra.item_id
        LEFT JOIN organizations o ON o.id = ra.organization_id

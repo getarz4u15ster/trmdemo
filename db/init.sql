@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS risk_alerts (
   score           INTEGER NOT NULL DEFAULT 0, -- 0-100 risk score
   detail          TEXT NOT NULL,              -- human-readable explanation
   status          TEXT NOT NULL DEFAULT 'OPEN', -- OPEN | ACK | RESOLVED
+  resolution      TEXT,                       -- how it was resolved (e.g. auto-resolved by restock)
+  resolved_at     TIMESTAMPTZ,                -- when it moved to RESOLVED
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

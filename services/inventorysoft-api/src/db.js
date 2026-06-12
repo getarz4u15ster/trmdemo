@@ -45,6 +45,10 @@ async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_risk_alerts_org_time
       ON risk_alerts (organization_id, created_at DESC);
+    -- Resolution audit trail (added for auto-resolve-on-restock). The incident
+    -- row is never deleted, so its id is preserved as the permanent record.
+    ALTER TABLE risk_alerts ADD COLUMN IF NOT EXISTS resolution  TEXT;
+    ALTER TABLE risk_alerts ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
   `);
   console.log("[db] schema ensured (risk_alerts)");
 }
