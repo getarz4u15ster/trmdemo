@@ -168,7 +168,8 @@
     .risk-alert .ra-item { display:inline-block;font-size:.72rem;font-weight:600;color:var(--text);background:var(--warm);border:1px solid var(--border);padding:.08rem .4rem;border-radius:6px;margin-bottom:.25rem; }
     .risk-alert .ra-detail { font-size:.78rem;color:var(--muted);line-height:1.4; }
     .risk-alert .ra-meta { font-size:.7rem;color:var(--muted);white-space:nowrap;text-align:right; }
-    .risk-alert .ra-score { font-weight:700;color:var(--text); }
+    .risk-alert .ra-score { font-weight:700;color:var(--text);font-size:1.05rem;line-height:1;cursor:help; }
+    .risk-alert .ra-score-lbl { display:block;font-size:.55rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:.1rem; }
     .risk-alert.ra-resolved { opacity:.55; }
     .ra-status { font-size:.6rem;font-weight:700;padding:.1rem .35rem;border-radius:5px;vertical-align:middle;margin-left:.3rem; }
     .st-open { background:#f8d7da;color:#721c24; } .st-ack { background:#fff3cd;color:#856404; } .st-resolved { background:#d4edda;color:#155724; }
@@ -546,7 +547,7 @@
           ${itemChip}
           <div class="ra-detail">${a.detail}</div>
           ${actions?`<div class="ra-actions">${actions}</div>`:''}</div>
-        <div class="ra-meta"><div class="ra-score">${a.score}</div><div>${when}</div></div>
+        <div class="ra-meta"><div class="ra-score" title="Risk score (0–100): how severe this alert is within its severity band. Higher = more urgent.">${a.score}<span class="ra-score-lbl">risk score</span></div><div>${when}</div></div>
       </div>`;
     }).join('');
   }
