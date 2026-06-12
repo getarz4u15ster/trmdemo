@@ -262,10 +262,12 @@
         <strong>grounded</strong> on read-only API calls (<code>POST /chat</code>) — the assistant can only query the
         same endpoints the dashboard uses, never change data.</p>
       <div class="chat-suggest">
-        <button type="button" onclick="askSuggest(this)">What's selling fastest today?</button>
+        <button type="button" onclick="askSuggest(this)">Give me an overview of this store</button>
+        <button type="button" onclick="askSuggest(this)">Any high-severity alerts I should act on right now?</button>
+        <button type="button" onclick="askSuggest(this)">Are there signs of theft or shrinkage today?</button>
+        <button type="button" onclick="askSuggest(this)">Any oversell or phantom-inventory attempts?</button>
+        <button type="button" onclick="askSuggest(this)">What's selling fastest right now?</button>
         <button type="button" onclick="askSuggest(this)">Which items are low or out of stock?</button>
-        <button type="button" onclick="askSuggest(this)">Any high-severity risk alerts?</button>
-        <button type="button" onclick="askSuggest(this)">What's my total inventory value?</button>
       </div>
       <div id="chat-log" class="chat-log"></div>
       <form class="chat-input" onsubmit="return sendChat(event)">
