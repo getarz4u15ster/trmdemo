@@ -48,6 +48,22 @@ const TOOLS = {
     apiGet(`/alerts?organizationId=${encodeURIComponent(org)}${severity ? `&severity=${severity}` : ""}`),
 };
 
+// ─── Department / organization routing ─────────────────────────────────────
+// Questions like "…in the bakery" should target the right org regardless of the
+// dashboard's current selection. Specific names (bakery/deli) are matched before
+// the broader "general goods" so they win. Ordered most-specific first.
+const DEPARTMENTS = [
+  { id: "352", aliases: ["bakery", "bake shop", "bread"] },
+  { id: "353", aliases: ["deli", "delicatessen"] },
+  { id: "351", aliases: ["general goods", "grocery", "dry goods", "center store"] },
+];
+function resolveOrg(question, fallback) {
+  for (const d of DEPARTMENTS) {
+    if (d.aliases.some((a) => new RegExp(`\\b${a}\\b`, "i").test(question))) return d.id;
+  }
+  return fallback;
+}
+
 const money = (n) => `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num = (n) => Number(n).toLocaleString();
 
@@ -300,7 +316,15 @@ async function composeWithLLM(question, findings) {
 
 // ─── Write path (human-in-the-loop): chat only *proposes* a restock; the user
 // confirms, then executeAction() performs it. INCREASE-only, bounded, validated.
+// Interrogative / advisory phrasings ("what do I need to restock?", "which items
+// should I restock?") are *questions* to be answered, not write commands. Only
+// imperative phrasings ("restock eggs by 100", "replenish everything") propose an
+// action.
+function isRestockQuestion(q) {
+  return /\b(what|whats|what's|which|where|do i|should i|need to|anything|is there|are there|how much|how many|list|show)\b/i.test(q);
+}
 function isRestockIntent(q) {
+  if (isRestockQuestion(q)) return false;
   return /\b(restock|replenish|refill|top[ -]?up|stock up|order more|bring .*back)\b/i.test(q) ||
     /\b(add|increase)\b.*\bstock\b/i.test(q) ||
     /\bstock\b.*\b(up|more)\b/i.test(q);
@@ -395,10 +419,14 @@ async function executeAction(action) {
 }
 
 async function chatAnswer(question, organizationId) {
-  // A restock request returns a *proposal* (with confirm actions), never a write.
-  if (isRestockIntent(question)) return proposeRestock(question, organizationId);
+  // Route to a department named in the question (e.g. "the bakery"), otherwise
+  // use the dashboard's current org.
+  const org = resolveOrg(question, organizationId);
 
-  const gathered = await gather(question, organizationId);
+  // A restock request returns a *proposal* (with confirm actions), never a write.
+  if (isRestockIntent(question)) return proposeRestock(question, org);
+
+  const gathered = await gather(question, org);
   let mode = "deterministic";
   let answer = composeDeterministic(gathered);
 

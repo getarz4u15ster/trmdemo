@@ -181,6 +181,14 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [OPEN, ACK, RESOLVED] }
+        - name: view
+          in: query
+          required: false
+          description: >-
+            Lifecycle scope applied to both the feed and the summary counts.
+            'active' = OPEN + ACK (the working queue), 'resolved' = RESOLVED only,
+            'all' = every incident. Defaults to 'all'.
+          schema: { type: string, enum: [active, resolved, all], default: all }
         - name: limit
           in: query
           required: false
@@ -328,6 +336,13 @@ components:
         operatorDirection: { type: string, enum: [INCREASE, DECREASE] }
         operatorMagnitude: { type: integer, example: 50 }
         organizationId: { type: string, example: "351" }
+        resolveAlertId:
+          type: string
+          description: >-
+            Optional. When a restock (INCREASE) is launched from a specific
+            incident card, the incident is resolved regardless of its rule
+            (explicit human remediation). Plain restocks omit this and only
+            auto-resolve OVERSELL_ATTEMPT incidents.
     AdminResponse:
       type: object
       properties:
@@ -339,7 +354,10 @@ components:
         operatorMagnitude: { type: integer }
         resolvedAlerts:
           type: array
-          description: IDs of OVERSELL_ATTEMPT incidents auto-resolved by this restock (INCREASE only).
+          description: >-
+            IDs of incidents resolved by this restock (INCREASE only): any
+            OVERSELL_ATTEMPT for the item/org, plus the specific resolveAlertId
+            incident when restocked from an incident card.
           items: { type: string }
     TimeSeries:
       type: object

@@ -112,7 +112,7 @@ app.get("/organization/:organizationId", async (req, res) => {
 // ─── POST /admin/:id  (synchronous restock / shrinkage) ─────────────────────
 app.post("/admin/:itemId", async (req, res) => {
   const { itemId } = req.params;
-  const { operatorDirection, operatorMagnitude, organizationId } = req.body || {};
+  const { operatorDirection, operatorMagnitude, organizationId, resolveAlertId } = req.body || {};
 
   if (!["INCREASE", "DECREASE"].includes(operatorDirection)) {
     return res.status(400).json({ error: "operatorDirection must be 'INCREASE' or 'DECREASE'." });
@@ -156,12 +156,28 @@ app.post("/admin/:itemId", async (req, res) => {
   // Risk monitoring: flag large manual decreases (shrinkage) for review.
   evaluateAdjustment({ itemId, organizationId, direction: operatorDirection, magnitude: operatorMagnitude });
 
-  // Auto-resolve stock-out incidents that a restock actually remediates. Only
-  // OVERSELL_ATTEMPT (phantom-inventory / out-of-stock) alerts qualify — a
-  // velocity spike or shrinkage is a different root cause and stays open. The
-  // incident row is kept (id + history preserved) with a resolution audit note.
+  // Restock-driven incident resolution. Two distinct paths, both audit-noted and
+  // id-preserving (the row stays on record; only status/resolution change):
+  //   1. EXPLICIT — when the operator restocks *from a specific incident card*
+  //      (resolveAlertId), that one incident is resolved regardless of rule,
+  //      because a human deliberately chose to remediate it.
+  //   2. HEURISTIC — for any restock, OVERSELL_ATTEMPT (phantom-inventory /
+  //      out-of-stock) alerts for the item/org are auto-resolved, since a restock
+  //      genuinely fixes a stock-out. Velocity spikes and shrinkage stay open.
   let resolvedAlerts = [];
   if (operatorDirection === "INCREASE") {
+    const seen = new Set();
+    if (resolveAlertId !== undefined && resolveAlertId !== null && String(resolveAlertId).trim() !== "") {
+      const ex = await query(
+        `UPDATE risk_alerts
+            SET status = 'RESOLVED', resolved_at = now(),
+                resolution = 'Resolved by restock +' || $4 || ' from incident card on ' || to_char(now(), 'YYYY-MM-DD HH24:MI')
+          WHERE id = $1 AND item_id = $2 AND organization_id = $3 AND status <> 'RESOLVED'
+          RETURNING id`,
+        [resolveAlertId, itemId, organizationId, operatorMagnitude]
+      );
+      for (const x of ex.rows) { seen.add(String(x.id)); }
+    }
     const r = await query(
       `UPDATE risk_alerts
           SET status = 'RESOLVED', resolved_at = now(),
@@ -171,9 +187,10 @@ app.post("/admin/:itemId", async (req, res) => {
         RETURNING id`,
       [itemId, organizationId, operatorMagnitude]
     );
-    resolvedAlerts = r.rows.map((x) => String(x.id));
+    for (const x of r.rows) { seen.add(String(x.id)); }
+    resolvedAlerts = [...seen];
     if (resolvedAlerts.length) {
-      console.log(`[risk] restock auto-resolved incident(s) ${resolvedAlerts.join(", ")} for item ${itemId}`);
+      console.log(`[risk] restock resolved incident(s) ${resolvedAlerts.join(", ")} for item ${itemId}`);
     }
   }
 
@@ -297,12 +314,20 @@ app.get("/analytics/organization/:organizationId/timeseries", async (req, res) =
 // ─── GET /alerts  (real-time risk / loss-prevention feed) ───────────────────
 app.get("/alerts", async (req, res) => {
   const { organizationId, status, severity } = req.query;
+  // view scopes by lifecycle: active = OPEN+ACK (default queue), resolved, or all.
+  const view = ["active", "resolved", "all"].includes(req.query.view) ? req.query.view : "all";
+  const viewClause = (alias) =>
+    view === "active" ? `${alias}.status <> 'RESOLVED'`
+    : view === "resolved" ? `${alias}.status = 'RESOLVED'`
+    : null;
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "50", 10)));
   const where = [];
   const params = [];
   if (organizationId) { params.push(organizationId); where.push(`ra.organization_id = $${params.length}`); }
   if (status) { params.push(status); where.push(`ra.status = $${params.length}`); }
   if (severity) { params.push(severity); where.push(`ra.severity = $${params.length}`); }
+  const vc = viewClause("ra");
+  if (vc) where.push(vc);
   params.push(limit);
   const rows = await query(
     `SELECT ra.id, ra.item_id AS "itemId", i.name AS "itemName",
@@ -317,11 +342,18 @@ app.get("/alerts", async (req, res) => {
       LIMIT $${params.length}`,
     params
   );
+  // Summary counts share the org + view scope (but ignore the severity filter,
+  // so the pills always show how many of each severity exist in the view).
+  const cWhere = [];
+  const cParams = [];
+  if (organizationId) { cParams.push(organizationId); cWhere.push(`organization_id = $${cParams.length}`); }
+  const cvc = viewClause("risk_alerts");
+  if (cvc) cWhere.push(cvc);
   const counts = await query(
     `SELECT severity, COUNT(*)::int AS n FROM risk_alerts
-      ${organizationId ? "WHERE organization_id = $1" : ""}
+      ${cWhere.length ? "WHERE " + cWhere.join(" AND ") : ""}
       GROUP BY severity`,
-    organizationId ? [organizationId] : []
+    cParams
   );
   const summary = { HIGH: 0, MEDIUM: 0, LOW: 0 };
   for (const c of counts.rows) summary[c.severity] = c.n;

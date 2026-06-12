@@ -158,6 +158,11 @@
     .sev-high { background:#f8d7da;color:#721c24;border-color:#f1b0b7; }
     .sev-medium { background:#fff3cd;color:#856404; }
     .sev-low { background:#e2e3e5;color:#383d41; }
+    .risk-view { display:inline-flex;gap:0;margin-bottom:.8rem;border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+    .rv-btn { font-size:.74rem;padding:.3rem .8rem;background:#fff;border:none;border-right:1px solid var(--border);cursor:pointer;color:var(--muted);font-weight:500;transition:background .12s,color .12s; }
+    .rv-btn:last-child { border-right:none; }
+    .rv-btn:hover { background:var(--warm); }
+    .rv-btn.active { background:var(--text);color:#fff;font-weight:700; }
     .risk-feed { max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem; }
     .risk-empty { color:var(--muted);font-size:.85rem;padding:1rem;text-align:center; }
     .risk-alert { display:flex;gap:.75rem;align-items:flex-start;padding:.65rem .8rem;border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:#fff;animation:fadeUp .3s ease both; }
@@ -277,6 +282,7 @@
         <button type="button" onclick="askSuggest(this)">Any oversell or phantom-inventory attempts?</button>
         <button type="button" onclick="askSuggest(this)">What's selling fastest right now?</button>
         <button type="button" onclick="askSuggest(this)">Which items are low or out of stock?</button>
+        <button type="button" onclick="askSuggest(this)">What do I need to restock in the bakery?</button>
       </div>
       <div id="chat-log" class="chat-log"></div>
       <form class="chat-input" onsubmit="return sendChat(event)">
@@ -302,6 +308,11 @@
         <span class="risk-pill sev-high" data-sev="HIGH" onclick="setRiskFilter('HIGH')" title="Filter to high severity">High <b id="risk-high">0</b></span>
         <span class="risk-pill sev-medium" data-sev="MEDIUM" onclick="setRiskFilter('MEDIUM')" title="Filter to medium severity">Medium <b id="risk-medium">0</b></span>
         <span class="risk-pill sev-low" data-sev="LOW" onclick="setRiskFilter('LOW')" title="Filter to low severity">Low <b id="risk-low">0</b></span>
+      </div>
+      <div class="risk-view" title="Active = open + acknowledged. Resolved incidents are kept for the audit trail.">
+        <button class="rv-btn active" data-view="active" onclick="setRiskView('active')">Active</button>
+        <button class="rv-btn" data-view="resolved" onclick="setRiskView('resolved')">Resolved</button>
+        <button class="rv-btn" data-view="all" onclick="setRiskView('all')">All</button>
       </div>
       <div id="risk-feed" class="risk-feed"><div class="risk-empty">No alerts yet — the stream is clean.</div></div>
     </div>
@@ -516,9 +527,14 @@
   function finishCheckout(){ cart=[]; updateCartUI(); closeCheckout(); loadOrg(currentOrg,document.querySelector('#org-tabs .org-tab.active')); toast('Order complete! Inventory refreshed.'); }
 
   // ── Restock (synchronous admin) ──
-  function openRestock(itemId,name,org){
+  // When a restock is launched from a specific incident card, we carry its id so
+  // the server resolves *that* incident (any rule) — explicit human remediation.
+  let _restockAlertId=null;
+  function openRestock(itemId,name,org,alertId){
+    _restockAlertId=alertId||null;
+    const fromAlert=!!_restockAlertId;
     document.getElementById('restock-body').innerHTML=`<h2>📦 Restock / Adjust</h2>
-      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">${name} (ID ${itemId}) — fires synchronous <code>POST /admin/${itemId}</code>.</p>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">${name} (ID ${itemId}) — fires synchronous <code>POST /admin/${itemId}</code>.${fromAlert?` <span style="color:var(--green2)">Will resolve incident #${_restockAlertId} on restock.</span>`:''}</p>
       <div class="field"><label>Direction</label><select id="rs-dir"><option value="INCREASE">INCREASE (restock)</option><option value="DECREASE">DECREASE (shrinkage)</option></select></div>
       <div class="field"><label>Magnitude</label><input id="rs-mag" type="number" value="50" min="1"></div>
       <div class="field"><label>Organization</label><select id="rs-org"><option value="351">351 · General Goods</option><option value="352">352 · Bakery</option><option value="353">353 · Deli</option></select></div>
@@ -530,14 +546,16 @@
     setTimeout(()=>document.getElementById('rs-mag').focus(),50);
   }
   // Restock straight from a risk alert (e.g. close out an oversell / out-of-stock flag).
-  function restockFromAlert(itemId,name,org){ openRestock(itemId,name||`Item ${itemId}`,org); }
-  function closeRestock(){ document.getElementById('restock-modal').classList.remove('open'); }
+  function restockFromAlert(itemId,name,org,alertId){ openRestock(itemId,name||`Item ${itemId}`,org,alertId); }
+  function closeRestock(){ _restockAlertId=null; document.getElementById('restock-modal').classList.remove('open'); }
   async function submitRestock(itemId){
     const operatorDirection=document.getElementById('rs-dir').value;
     const operatorMagnitude=parseInt(document.getElementById('rs-mag').value,10);
     const organizationId=document.getElementById('rs-org').value;
     const res=document.getElementById('rs-result');
-    const {status,data}=await apiPost(`/admin/${itemId}`,{operatorDirection,operatorMagnitude,organizationId});
+    const body={operatorDirection,operatorMagnitude,organizationId};
+    if(_restockAlertId&&operatorDirection==='INCREASE') body.resolveAlertId=_restockAlertId;
+    const {status,data}=await apiPost(`/admin/${itemId}`,body);
     if(status===200){ const rz=(data.resolvedAlerts||[]);
       res.innerHTML=`<span style="color:var(--green2)">✓ ${data.previousStock} → ${data.newStock}${rz.length?` · resolved incident${rz.length>1?'s':''} ${rz.map(i=>'#'+i).join(', ')}`:''}</span>`;
       toast(rz.length?`Stock updated ✓ · auto-resolved ${rz.length} incident${rz.length>1?'s':''}`:'Stock updated ✓'); setTimeout(()=>{ closeRestock();
@@ -572,14 +590,20 @@
   // ── Risk & loss-prevention feed ──
   const RULE_LABELS={ SALE_VELOCITY:'Sale-velocity spike', OVERSELL_ATTEMPT:'Oversell / phantom inventory', LARGE_SHRINKAGE:'Large manual shrinkage' };
   let riskFilter='';
+  let riskView='active'; // case queue defaults to active work; resolved kept for audit
   function setRiskFilter(sev){
     riskFilter=(riskFilter===sev)?'':sev; // click the active pill again to clear
     document.querySelectorAll('#view-ops .risk-pill').forEach(p=>p.classList.toggle('active',(p.dataset.sev||'')===riskFilter));
     loadAlerts();
   }
+  function setRiskView(v){
+    riskView=v;
+    document.querySelectorAll('#view-ops .rv-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+    loadAlerts();
+  }
   async function loadAlerts(){
     let data;
-    const q=`/alerts?organizationId=${opsOrg}&limit=50${riskFilter?`&severity=${riskFilter}`:''}`;
+    const q=`/alerts?organizationId=${opsOrg}&limit=50&view=${riskView}${riskFilter?`&severity=${riskFilter}`:''}`;
     try{ data=await apiGet(q); }catch{ return; }
     const s=data.summary||{};
     document.getElementById('risk-high').textContent=s.HIGH||0;
@@ -588,7 +612,13 @@
     document.getElementById('risk-all').textContent=(s.HIGH||0)+(s.MEDIUM||0)+(s.LOW||0);
     const feed=document.getElementById('risk-feed');
     const alerts=data.alerts||[];
-    if(!alerts.length){ feed.innerHTML=`<div class="risk-empty">${riskFilter?`No ${riskFilter.toLowerCase()}-severity alerts.`:'No alerts yet — the stream is clean.'}</div>`; return; }
+    if(!alerts.length){
+      const sevTxt=riskFilter?`${riskFilter.toLowerCase()}-severity `:'';
+      const msg=riskView==='resolved'?`No resolved ${sevTxt}incidents yet.`
+        :riskView==='all'?(sevTxt?`No ${sevTxt}incidents.`:'No alerts yet — the stream is clean.')
+        :(sevTxt?`No active ${sevTxt}incidents.`:'No active incidents — the queue is clear.');
+      feed.innerHTML=`<div class="risk-empty">${msg}</div>`; return;
+    }
     feed.innerHTML=alerts.map(a=>{
       const sev=(a.severity||'LOW').toLowerCase();
       const st=(a.status||'OPEN');
@@ -596,7 +626,7 @@
       const statusBadge=`<span class="ra-status st-${st.toLowerCase()}">${st}</span>`;
       const itemName=a.itemName||(a.itemId?`Item ${a.itemId}`:null);
       const nmArg=(itemName||'').replace(/'/g,"\\'");
-      const restockCall=a.itemId?`restockFromAlert('${a.itemId}','${nmArg}','${a.organizationId||''}')`:'';
+      const restockCall=a.itemId?`restockFromAlert('${a.itemId}','${nmArg}','${a.organizationId||''}','${a.id}')`:'';
       let actions='';
       if(st==='OPEN') actions=`<button class="ra-btn" onclick="updateAlert('${a.id}','ACK')">Acknowledge</button><button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
       else if(st==='ACK') actions=`<button class="ra-btn ra-btn-resolve" onclick="updateAlert('${a.id}','RESOLVED')">Resolve</button>`;
