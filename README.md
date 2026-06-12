@@ -53,6 +53,21 @@ the container (see `docker-compose.yml`), so edits to HTML/CSS/JS show up on a b
 refresh — **no rebuild needed**. Server-side changes (the `api` service, or the
 storefront's `src/`) still require `docker compose up -d --build <service>`.
 
+### Optional: enable the LLM-powered "Ask the Data" chat
+
+The conversational panel works **offline by default** (deterministic parser). To
+have an LLM phrase the answers (still grounded strictly on live data), add a key:
+
+```bash
+cp .env.example .env        # .env is gitignored — your key never enters git
+# edit .env and set OPENAI_API_KEY=sk-...
+docker compose up -d storefront
+```
+
+The panel's badge reflects the real state — **connected**, **no quota**, **invalid
+key**, or **offline parser** — and chat always falls back to the offline parser if
+the LLM is unavailable.
+
 ### Presentation materials
 
 - **Architecture diagram** — [`docs/architecture.drawio`](./docs/architecture.drawio) (open in [draw.io](https://app.diagrams.net); two pages: Local Docker Stack + AWS Target)
@@ -109,6 +124,7 @@ Three containers, one `docker compose up`:
 | **Track inventory over the working day** | Append-only `inventory_ledger` + `GET /analytics/.../timeseries` powering a stock-vs-sold chart with 12-hour time axis and a hover tooltip showing the per-item (`soldByItem`) breakdown for each interval |
 | **Error handling (409)** | `POST /admin` returns 409 on negative stock; UI surfaces it inline |
 | **Real-time risk / loss prevention** *(extension)* | A monitoring engine scores every stock movement against rules — sale-velocity spikes, oversell/phantom inventory, large shrinkage — raising scored `risk_alerts` with a triage workflow (acknowledge / resolve) shown live on the Ops dashboard. Each alert names the affected item + organization, and the feed is filterable by severity (High / Medium / Low). Mirrors a transaction-monitoring system applied to retail loss prevention |
+| **Conversational analytics** *(extension)* | An "Ask the Data" panel answers plain-English questions about stock, sales, value, and risk via `POST /chat`. It's a **grounded, read-only tool-calling agent**: a deterministic planner calls an allow-list of read endpoints and every answer cites the endpoints it used. Works fully offline; if `OPENAI_API_KEY` is set it uses an LLM to phrase the answer, grounded strictly on the fetched data (never free-form SQL) |
 | **Extensibility to AWS** | See mapping below — every local component has a 1:1 managed-service target |
 
 ---
@@ -129,7 +145,8 @@ is direct:
 | Product images / day-end archives | **S3** | Ledger + nightly snapshots archived to S3/Glacier |
 | Inventory time series | **CloudWatch / Timestream / QuickSight** | Dashboards over the same ledger data |
 | Risk-monitoring engine | **Lambda (stream consumer) + EventBridge / SNS** | Scores the sale-event stream and emits alerts; `risk_alerts` lives in RDS |
-| Secrets (`PG*`) | **Secrets Manager / SSM Parameter Store** | No plaintext creds in env in prod |
+| "Ask the Data" chat agent | **Amazon Bedrock (Claude) + Lambda tools + API Gateway** | Read-only tool-calling over the same RDS/ledger; conversation + tool logs to CloudWatch/S3 for audit |
+| Secrets (`PG*`, `OPENAI_API_KEY`) | **Secrets Manager / SSM Parameter Store** | No plaintext creds in env in prod |
 
 ---
 

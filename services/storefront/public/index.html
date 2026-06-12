@@ -177,6 +177,28 @@
     .ra-btn { font-size:.72rem;padding:.25rem .6rem;border:1px solid var(--border);background:#fff;border-radius:6px;cursor:pointer;color:var(--text);transition:all .15s; }
     .ra-btn:hover { background:var(--warm); }
     .ra-btn-resolve { border-color:var(--green2);color:var(--green2); } .ra-btn-resolve:hover { background:var(--green);color:#fff;border-color:var(--green); }
+    /* Ask-the-data chat */
+    .chat-badge { font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:.15rem .45rem;border-radius:6px;background:#e2e3e5;color:#383d41;vertical-align:middle;margin-left:.4rem; }
+    .chat-badge.live { background:#d4edda;color:#155724; }
+    .chat-badge.warn { background:#fff3cd;color:#856404; }
+    .chat-badge.err { background:#f8d7da;color:#721c24; }
+    .chat-suggest { display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem; }
+    .chat-suggest button { font-size:.74rem;padding:.3rem .6rem;border:1px solid var(--border);background:#fff;border-radius:16px;cursor:pointer;color:var(--text);transition:all .12s; }
+    .chat-suggest button:hover { background:var(--warm); }
+    .chat-log { display:flex;flex-direction:column;gap:.55rem;max-height:320px;overflow-y:auto;margin-bottom:.7rem; }
+    .chat-log:empty { display:none; }
+    .chat-msg { max-width:85%;padding:.5rem .7rem;border-radius:12px;font-size:.82rem;line-height:1.45; }
+    .chat-msg.user { align-self:flex-end;background:var(--green2);color:#fff;border-bottom-right-radius:3px; }
+    .chat-msg.bot { align-self:flex-start;background:var(--warm);border:1px solid var(--border);border-bottom-left-radius:3px; }
+    .chat-msg.bot.thinking { color:var(--muted);font-style:italic; }
+    .chat-used { margin-top:.4rem;display:flex;flex-wrap:wrap;gap:.3rem; }
+    .chat-used code { font-size:.62rem;background:#fff;border:1px solid var(--border);border-radius:5px;padding:.05rem .35rem;color:var(--muted); }
+    .chat-mode { font-size:.6rem;color:var(--muted);margin-top:.3rem;text-transform:uppercase;letter-spacing:.03em; }
+    .chat-input { display:flex;gap:.5rem; }
+    .chat-input input { flex:1;padding:.55rem .7rem;border:1px solid var(--border);border-radius:8px;font-size:.85rem;font-family:inherit; }
+    .chat-input input:focus { outline:none;border-color:var(--green2); }
+    .chat-input button { padding:.55rem 1.1rem;border:none;background:var(--green2);color:#fff;border-radius:8px;font-weight:600;cursor:pointer; }
+    .chat-input button:disabled { opacity:.5;cursor:default; }
 
     .monitor-toggle { position:fixed;bottom:1.5rem;right:1.5rem;background:var(--green);color:#fff;border:none;border-radius:50%;width:48px;height:48px;font-size:1.2rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:150;transition:transform .15s; }
     .monitor-toggle:hover { transform:scale(1.08); }
@@ -232,6 +254,24 @@
       <div class="stat-card"><div class="label">Units Sold Today</div><div class="value" id="stat-sold">—</div></div>
       <div class="stat-card"><div class="label">Inventory Value</div><div class="value" id="stat-value">—</div></div>
       <div class="stat-card"><div class="label">SKUs Low/Out</div><div class="value" id="stat-low">—</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Ask the Data <span id="chat-badge" class="chat-badge">offline parser</span></h3>
+      <p class="sub">Ask about this organization's stock, sales, value, and risk alerts in plain English. Answers are
+        <strong>grounded</strong> on read-only API calls (<code>POST /chat</code>) — the assistant can only query the
+        same endpoints the dashboard uses, never change data.</p>
+      <div class="chat-suggest">
+        <button type="button" onclick="askSuggest(this)">What's selling fastest today?</button>
+        <button type="button" onclick="askSuggest(this)">Which items are low or out of stock?</button>
+        <button type="button" onclick="askSuggest(this)">Any high-severity risk alerts?</button>
+        <button type="button" onclick="askSuggest(this)">What's my total inventory value?</button>
+      </div>
+      <div id="chat-log" class="chat-log"></div>
+      <form class="chat-input" onsubmit="return sendChat(event)">
+        <input id="chat-q" type="text" placeholder="Ask about stock, sales, value, or risk…" maxlength="500" autocomplete="off">
+        <button type="submit" id="chat-send">Ask</button>
+      </form>
     </div>
 
     <div class="panel">
@@ -554,6 +594,47 @@
   async function updateAlert(id,status){
     try{ await apiPost(`/alerts/${id}`,{status}); toast(`Alert ${status.toLowerCase()}`); loadAlerts(); }
     catch{ toast('Could not update alert'); }
+  }
+
+  // ── Ask-the-data conversational panel ──
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function setChatBadge(info){
+    const b=document.getElementById('chat-badge'); if(!b) return;
+    b.classList.remove('live','warn','err');
+    const prov=(info.provider||'LLM').toUpperCase();
+    const map={
+      live:{t:`${prov} connected`,c:'live'},
+      no_quota:{t:'LLM key set · no quota',c:'warn'},
+      rate_limited:{t:'LLM rate-limited',c:'warn'},
+      bad_key:{t:'LLM key invalid',c:'err'},
+      error:{t:'LLM error · using offline',c:'err'},
+      timeout:{t:'LLM timeout · using offline',c:'err'},
+      network:{t:'LLM unreachable · using offline',c:'err'},
+      off:{t:'offline parser',c:''},
+    };
+    const m=map[info.status]||map.off; b.textContent=m.t; if(m.c) b.classList.add(m.c);
+  }
+  (async()=>{ try{ setChatBadge(await (await fetch('/chat-info')).json()); }catch{ setChatBadge({status:'off'}); } })();
+  function addChatMsg(cls,html){ const log=document.getElementById('chat-log');
+    const d=document.createElement('div'); d.className=`chat-msg ${cls}`; d.innerHTML=html; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
+  function askSuggest(btn){ document.getElementById('chat-q').value=btn.textContent; sendChat(); }
+  async function sendChat(e){
+    if(e&&e.preventDefault) e.preventDefault();
+    const input=document.getElementById('chat-q'); const q=input.value.trim(); if(!q) return false;
+    const btn=document.getElementById('chat-send');
+    addChatMsg('user',esc(q)); input.value=''; btn.disabled=true;
+    const thinking=addChatMsg('bot thinking','Thinking…');
+    try{
+      const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,organizationId:opsOrg})});
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||'failed');
+      const used=(d.used||[]).map(u=>`<code title="${esc(u.tool)}">${esc(u.endpoint)}</code>`).join('');
+      const mode=d.mode&&d.mode.startsWith('llm')?`Answered by ${esc(d.mode.split(':')[1]||'LLM')} · grounded on live data`:'Answered by offline parser · grounded on live data';
+      thinking.classList.remove('thinking');
+      thinking.innerHTML=`${esc(d.answer)}${used?`<div class="chat-used">${used}</div>`:''}<div class="chat-mode">${mode}</div>`;
+    }catch(err){ thinking.classList.remove('thinking'); thinking.innerHTML='Sorry — I couldn\u2019t answer that just now.'; }
+    finally{ btn.disabled=false; input.focus(); }
+    return false;
   }
 
   function fmtClock(t){ return new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); }

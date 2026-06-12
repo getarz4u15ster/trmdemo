@@ -58,6 +58,12 @@ check "GET / 200"                 200 "$(code "$STORE/")"
 check "GET /limiter-stats 200"    200 "$(code "$STORE/limiter-stats")"
 check "proxy GET org 200"         200 "$(code "$STORE/proxy/organization/351")"
 
+echo "• Ask-the-data chat (grounded, read-only)"
+check "GET /chat-info 200"        200 "$(code "$STORE/chat-info")"
+check "POST /chat 200"            200 "$(code -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"question":"what is low on stock?","organizationId":"351"}')"
+check "POST /chat no body 400"    400 "$(code -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"organizationId":"351"}')"
+check "chat returns an answer"    "yes" "$(curl -s -X POST "$STORE/chat" -H 'Content-Type: application/json' -d '{"question":"top sellers today?","organizationId":"351"}' | grep -q '"answer"' && echo yes || echo no)"
+
 echo
 echo "──────────────────────────────"
 echo "  Passed: $pass   Failed: $fail"

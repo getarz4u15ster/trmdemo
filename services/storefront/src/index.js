@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const { RateLimiter } = require("./rateLimiter");
+const { chatAnswer, llmStatus } = require("./chat");
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const INVENTORYSOFT_BASE = process.env.INVENTORYSOFT_URL || "http://localhost:3001";
@@ -43,6 +44,31 @@ app.all("/proxy/*", async (req, res) => {
 
 // Expose limiter stats so the UI can visualise queue depth during load.
 app.get("/limiter-stats", (_req, res) => res.json(limiter.stats()));
+
+// ─── Conversational query over the ops data (read-only, grounded) ───────────
+app.post("/chat", async (req, res) => {
+  const { question, organizationId } = req.body || {};
+  if (!question || typeof question !== "string" || !organizationId) {
+    return res.status(400).json({ error: "question (string) and organizationId are required." });
+  }
+  if (question.length > 500) return res.status(400).json({ error: "Question is too long (max 500 chars)." });
+  try {
+    const out = await chatAnswer(question.trim(), String(organizationId));
+    res.json(out);
+  } catch (e) {
+    res.status(502).json({ error: "Could not answer right now.", detail: e.message });
+  }
+});
+
+// Lets the UI badge reflect the real LLM state (live / no-quota / bad-key / off).
+app.get("/chat-info", async (_req, res) => {
+  try {
+    const s = await llmStatus();
+    res.json({ llm: s.status === "live", provider: s.provider, status: s.status });
+  } catch (e) {
+    res.json({ llm: false, status: "error" });
+  }
+});
 
 app.use(express.static(path.join(__dirname, "..", "public")));
 

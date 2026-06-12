@@ -8,6 +8,9 @@
 # Node
 node_modules/
 
+# Secrets / local env (LLM API keys, etc.) — never commit
+.env
+
 # Private interview prep docs
 docs/DEMO_SCRIPT.md
 docs/ASSESSMENT_CHECKLIST.md

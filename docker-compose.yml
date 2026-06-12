@@ -54,6 +54,10 @@ services:
       PORT: "3000"
       INVENTORYSOFT_URL: "http://api:3001"
       CLIENT_RATE: "20"
+      # Optional: power the "Ask the Data" chat with a real LLM. Put your key in a
+      # root .env file (gitignored). If unset, chat falls back to the offline parser.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
     ports:
       - "3000:3000"
     volumes:
